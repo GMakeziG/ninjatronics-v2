@@ -1,0 +1,27 @@
+---
+import { render } from "astro:content";
+import ArticleLayout from "../../layouts/ArticleLayout.astro";
+import Callout from "../../components/Callout.astro";
+import { adjacentPosts, getPosts, relatedPosts, type Post } from "../../lib/posts";
+
+// One page per post in this build: published posts in production, plus
+// drafts in `astro dev`. A draft therefore has no page at all in dist/.
+export async function getStaticPaths() {
+  const posts = await getPosts();
+  return posts.map((post) => ({ params: { slug: post.id }, props: { post, posts } }));
+}
+
+interface Props {
+  post: Post;
+  posts: Post[];
+}
+
+const { post, posts } = Astro.props;
+const { Content, headings } = await render(post);
+const { older, newer } = adjacentPosts(posts, post);
+const related = relatedPosts(posts, post);
+---
+
+<ArticleLayout post={post} headings={headings} older={older} newer={newer} related={related}>
+  <Content components={{ Callout }} />
+</ArticleLayout>

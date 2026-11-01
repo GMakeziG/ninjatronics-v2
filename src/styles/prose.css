@@ -1,0 +1,212 @@
+/*
+ * Long-form article typography and code blocks. Applies only inside
+ * `.prose` (the rendered Markdown/MDX body), so it can never leak into
+ * page chrome. Reading measure comes from the parent grid (--measure).
+ */
+
+.prose {
+  font-size: var(--step-body-lg);
+  line-height: var(--leading-body);
+  overflow-wrap: break-word;
+}
+
+.prose > * + * {
+  margin-top: var(--space-5);
+}
+
+.prose :where(h2, h3, h4) {
+  scroll-margin-top: var(--space-5);
+}
+
+/* h2 carries the vermilion section marker from the reference article. */
+.prose h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-8);
+  font-size: var(--step-h2);
+}
+
+.prose h2::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 0.85em;
+  background: var(--accent-change);
+}
+
+.prose h3 {
+  margin-top: var(--space-7);
+  font-size: var(--step-h3);
+}
+
+.prose h4 {
+  margin-top: var(--space-6);
+  font-size: var(--step-body-lg);
+}
+
+.prose :where(h2, h3, h4) + * {
+  margin-top: var(--space-3);
+}
+
+.prose a {
+  color: var(--accent-link);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.prose a:hover {
+  text-decoration-thickness: 2px;
+}
+
+.prose strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.prose :where(ul, ol) {
+  padding-left: 1.4em;
+}
+
+.prose li + li {
+  margin-top: var(--space-2);
+}
+
+.prose li::marker {
+  color: var(--text-secondary);
+}
+
+.prose blockquote {
+  margin-inline: 0;
+  padding-left: var(--space-5);
+  border-left: 3px solid var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.prose hr {
+  margin-block: var(--space-7);
+  border: 0;
+  border-top: var(--border-width) solid var(--border-subtle);
+}
+
+.prose img {
+  height: auto;
+  border-radius: var(--radius-md);
+}
+
+.prose figure:not(.code-block) {
+  margin: var(--space-6) 0;
+}
+
+.prose figcaption:not(.code-block__bar) {
+  margin-top: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--step-small);
+}
+
+/* Tables scroll horizontally on narrow screens instead of breaking layout. */
+.prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: var(--step-small);
+}
+
+.prose :where(th, td) {
+  padding: var(--space-2) var(--space-4);
+  border-bottom: var(--border-width) solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--step-micro);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+/* Inline code */
+.prose :not(pre) > code {
+  padding: 0.1em 0.35em;
+  background: var(--surface-panel);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 0.85em;
+}
+
+.prose kbd {
+  padding: 0.1em 0.4em;
+  border: var(--border-width) solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85em;
+}
+
+/* Code blocks (markup from src/lib/shiki.ts) */
+.prose .code-block {
+  margin-inline: 0;
+  overflow: hidden;
+  background: var(--surface-card);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.prose .code-block__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 2.5rem;
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border-bottom: var(--border-width) solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--step-micro);
+}
+
+.prose .code-block__lang {
+  color: var(--text-secondary);
+  letter-spacing: var(--tracking-label);
+  text-transform: lowercase;
+}
+
+.prose .code-block__copy {
+  min-width: var(--tap-target);
+  min-height: 2rem;
+  padding: 0 var(--space-3);
+  background: transparent;
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.prose .code-block__copy:hover {
+  border-color: var(--accent-link);
+  color: var(--accent-link);
+}
+
+@media (pointer: coarse) {
+  .prose .code-block__copy {
+    min-height: var(--tap-target);
+  }
+}
+
+.prose pre {
+  margin: 0;
+  padding: var(--space-4);
+  overflow-x: auto;
+  font-size: var(--step-meta);
+  line-height: 1.65;
+  tab-size: 2;
+  /* Shiki sets an inline background; keep the token surface consistent. */
+  background-color: var(--surface-card) !important;
+}
+
+.prose pre code {
+  font-size: inherit;
+}

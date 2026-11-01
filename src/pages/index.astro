@@ -5,18 +5,23 @@ import SectionHeading from "../components/SectionHeading.astro";
 import ArticleCard from "../components/ArticleCard.astro";
 import BranchLines from "../components/BranchLines.astro";
 import { SITE } from "../config/site";
+import { getCategory } from "../config/categories";
+import { getPosts, postPath } from "../lib/posts";
+import { readingMinutes } from "../lib/reading-time";
 
-// Milestone 1: no articles exist yet. These cards are explicit placeholders
-// (no invented titles, dates, or topics). Milestone 2 replaces this array
-// with the newest published entries from the blog content collection.
-const latest = Array.from({ length: 3 }, () => ({
-  category: "Pending migration",
-  title: "Article placeholder",
-  excerpt: "Published articles appear here once the blog engine and content migration are complete.",
-}));
+// Three newest posts in this build (published only, in production).
+const latest = (await getPosts()).slice(0, 3);
+
+const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: SITE.name,
+  url: SITE.url,
+  description: SITE.description,
+};
 ---
 
-<BaseLayout>
+<BaseLayout jsonLd={websiteJsonLd}>
   <section class="hero" aria-labelledby="hero-title">
     <div class="container hero__inner">
       <div class="hero__copy">
@@ -51,9 +56,25 @@ const latest = Array.from({ length: 3 }, () => ({
 
   <section class="latest container" aria-labelledby="latest-title">
     <SectionHeading id="latest-title" title="Latest Articles" link={{ label: "View Archive", href: "/blog" }} />
-    <div class="latest__grid">
-      {latest.map((article) => <ArticleCard {...article} placeholder />)}
-    </div>
+    {
+      latest.length > 0 ? (
+        <div class="latest__grid">
+          {latest.map((post) => (
+            <ArticleCard
+              href={postPath(post)}
+              title={post.data.title}
+              category={getCategory(post.data.category).label}
+              excerpt={post.data.description}
+              date={post.data.pubDate}
+              readingMinutes={readingMinutes(post.body)}
+              draft={post.data.draft}
+            />
+          ))}
+        </div>
+      ) : (
+        <p class="latest__empty">No articles have been published yet. The first articles are being prepared.</p>
+      )
+    }
   </section>
 </BaseLayout>
 
@@ -149,6 +170,15 @@ const latest = Array.from({ length: 3 }, () => ({
 
   .latest {
     padding-top: var(--space-8);
+  }
+
+  .latest__empty {
+    max-width: var(--measure);
+    padding: var(--space-5);
+    background: var(--surface-card);
+    border: var(--border-width) dashed var(--border-strong);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
   }
 
   .latest__grid {

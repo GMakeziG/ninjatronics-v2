@@ -1,0 +1,58 @@
+---
+import { tagPath } from "../lib/posts";
+
+interface Props {
+  tags: string[];
+  /** Accessible name for the list, e.g. "Article tags". */
+  label?: string;
+}
+
+const { tags, label = "Tags" } = Astro.props;
+---
+
+{
+  tags.length > 0 && (
+    <ul class="tags" aria-label={label}>
+      {tags.map((tag) => (
+        <li>
+          <a href={tagPath(tag)}>#{tag}</a>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+<style>
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0 var(--space-3);
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--accent-link);
+    font-family: var(--font-mono);
+    font-size: var(--step-meta);
+    text-decoration: none;
+  }
+
+  a:hover {
+    border-color: var(--accent-link);
+  }
+
+  /* Keep a 44px touch target without enlarging the visual chip. */
+  @media (pointer: coarse) {
+    a {
+      min-height: var(--tap-target);
+    }
+  }
+</style>

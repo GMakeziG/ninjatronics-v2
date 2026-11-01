@@ -1,0 +1,70 @@
+---
+// Technical callout for MDX articles. Available in any .mdx file without an
+// import (registered in ArticleLayout):
+//
+//   <Callout type="warning" title="Optional title">
+//     Restart the service after changing the unit file.
+//   </Callout>
+//
+// Flat styling per the Effects Rule: a colored rule and label, no glow.
+type CalloutType = "note" | "tip" | "warning";
+
+interface Props {
+  type?: CalloutType;
+  title?: string;
+}
+
+const LABELS: Record<CalloutType, string> = { note: "Note", tip: "Tip", warning: "Warning" };
+const { type = "note", title } = Astro.props;
+---
+
+<aside class:list={["callout", `callout--${type}`]} role="note" aria-label={title ?? LABELS[type]}>
+  <p class="callout__label">{LABELS[type]}{title && <span class="callout__title">: {title}</span>}</p>
+  <div class="callout__body"><slot /></div>
+</aside>
+
+<style>
+  .callout {
+    --callout-accent: var(--accent-link);
+    margin-block: var(--space-5);
+    padding: var(--space-4) var(--space-5);
+    background: var(--surface-card);
+    border: var(--border-width) solid var(--border-subtle);
+    border-left: 3px solid var(--callout-accent);
+    border-radius: var(--radius-sm);
+  }
+
+  .callout--tip {
+    --callout-accent: var(--brand-sage);
+  }
+
+  .callout--warning {
+    --callout-accent: var(--accent-change);
+  }
+
+  .callout__label {
+    margin: 0 0 var(--space-2);
+    color: var(--callout-accent);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .callout__title {
+    color: var(--text-primary);
+    text-transform: none;
+    letter-spacing: normal;
+    font-family: var(--font-body);
+    font-size: var(--step-small);
+  }
+
+  .callout__body > :global(:first-child) {
+    margin-top: 0;
+  }
+
+  .callout__body > :global(:last-child) {
+    margin-bottom: 0;
+  }
+</style>

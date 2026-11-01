@@ -1,0 +1,130 @@
+---
+// "On this page" navigation built from the article's h2/h3 headings at build
+// time. No JavaScript. Rendered twice by ArticleLayout: a sticky sidebar on
+// wide screens and a collapsible <details> on narrow ones. CSS hides one with
+// display:none, which also removes it from the accessibility tree, so
+// assistive tech only ever sees one.
+import type { MarkdownHeading } from "astro";
+
+interface Props {
+  headings: MarkdownHeading[];
+  variant: "sidebar" | "inline";
+}
+
+const { headings, variant } = Astro.props;
+const items = headings.filter((h) => h.depth === 2 || h.depth === 3);
+---
+
+{
+  variant === "sidebar" ? (
+    <nav class="toc toc--sidebar" aria-label="On this page">
+      <p class="toc__title">On this page</p>
+      <ol class="toc__list">
+        {items.map((h) => (
+          <li class={`toc__item toc__item--h${h.depth}`}>
+            <a href={`#${h.slug}`}>{h.text}</a>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  ) : (
+    <details class="toc toc--inline">
+      <summary class="toc__title">On this page</summary>
+      <nav aria-label="On this page">
+        <ol class="toc__list">
+          {items.map((h) => (
+            <li class={`toc__item toc__item--h${h.depth}`}>
+              <a href={`#${h.slug}`}>{h.text}</a>
+            </li>
+          ))}
+        </ol>
+      </nav>
+    </details>
+  )
+}
+
+<style>
+  .toc {
+    font-size: var(--step-small);
+  }
+
+  .toc__title {
+    margin: 0 0 var(--space-3);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .toc__list {
+    display: grid;
+    gap: var(--space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-left: var(--border-width) solid var(--border-subtle);
+  }
+
+  .toc__item a {
+    display: block;
+    padding: var(--space-1) var(--space-3);
+    margin-left: -1px;
+    border-left: 2px solid transparent;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    text-decoration: none;
+  }
+
+  .toc__item--h3 a {
+    padding-left: var(--space-5);
+    font-size: var(--step-meta);
+  }
+
+  .toc__item a:hover {
+    color: var(--text-primary);
+    border-left-color: var(--accent-change);
+  }
+
+  .toc--inline {
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-card);
+    border: var(--border-width) solid var(--border-subtle);
+    border-radius: var(--radius-md);
+  }
+
+  .toc--inline summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--tap-target);
+    margin: 0;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .toc--inline summary::-webkit-details-marker {
+    display: none;
+  }
+
+  /* Flat open/closed indicator (display:flex suppresses the native marker). */
+  .toc--inline summary::after {
+    content: "+";
+    color: var(--accent-change);
+    font-size: var(--step-body);
+  }
+
+  .toc--inline[open] summary::after {
+    content: "−";
+  }
+
+  .toc--inline[open] summary {
+    margin-bottom: var(--space-2);
+  }
+
+  .toc--inline .toc__item a {
+    min-height: var(--tap-target);
+    display: flex;
+    align-items: center;
+  }
+</style>

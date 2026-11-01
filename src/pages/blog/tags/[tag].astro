@@ -1,0 +1,58 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PostList from "../../../components/PostList.astro";
+import { getPosts, postsWithTag, tagCounts, type Post } from "../../../lib/posts";
+
+export async function getStaticPaths() {
+  const posts = await getPosts();
+  return tagCounts(posts).map(({ tag }) => ({ params: { tag }, props: { tag, posts: postsWithTag(posts, tag) } }));
+}
+
+interface Props {
+  tag: string;
+  posts: Post[];
+}
+
+const { tag, posts } = Astro.props;
+---
+
+<BaseLayout title={`#${tag} articles`} description={`Articles tagged ${tag}.`}>
+  <section class="container listing" aria-labelledby="tag-title">
+    <header class="listing__header">
+      <p class="listing__eyebrow"><a href="/blog">Blog</a> / Tag</p>
+      <h1 id="tag-title" class="listing__title">#{tag}</h1>
+      <p class="listing__count">{posts.length} {posts.length === 1 ? "article" : "articles"}</p>
+    </header>
+    <PostList posts={posts} />
+  </section>
+</BaseLayout>
+
+<style>
+  .listing {
+    padding-top: var(--space-page-start);
+  }
+
+  .listing__header {
+    display: grid;
+    gap: var(--space-3);
+    justify-items: start;
+    margin-bottom: var(--space-6);
+  }
+
+  .listing__eyebrow,
+  .listing__count {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .listing__eyebrow a {
+    color: inherit;
+  }
+
+  .listing__title {
+    font-size: var(--step-h1);
+  }
+</style>

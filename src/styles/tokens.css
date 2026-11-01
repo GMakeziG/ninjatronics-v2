@@ -93,6 +93,7 @@
   /* Shape and layout */
   --radius-sm: 4px;
   --radius-md: 8px;
+  --radius-pill: 999px;
   --border-width: 1px;
   --focus-width: 2px;
   --tap-target: 44px;

@@ -1,0 +1,68 @@
+---
+// Category navigation for the blog index. Plain links (no JavaScript).
+// Only categories that have articles in this build are shown.
+import { CATEGORIES, type CategorySlug } from "../config/categories";
+import { categoryPath } from "../lib/posts";
+
+interface Props {
+  available: Set<CategorySlug>;
+  current?: CategorySlug;
+}
+
+const { available, current } = Astro.props;
+const visible = CATEGORIES.filter((c) => available.has(c.slug));
+---
+
+{
+  visible.length > 0 && (
+    <nav class="filter" aria-label="Categories">
+      <ul>
+        <li>
+          <a href="/blog" aria-current={current ? undefined : "page"}>All</a>
+        </li>
+        {visible.map((c) => (
+          <li>
+            <a href={categoryPath(c.slug)} aria-current={current === c.slug ? "page" : undefined}>
+              {c.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )
+}
+
+<style>
+  ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-target);
+    padding: 0 var(--space-4);
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    text-decoration: none;
+  }
+
+  a:hover {
+    border-color: var(--text-secondary);
+  }
+
+  a[aria-current="page"] {
+    border-color: var(--accent-change);
+    color: var(--accent-change);
+  }
+</style>

@@ -1,0 +1,54 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import PostList from "../../components/PostList.astro";
+import CategoryFilter from "../../components/CategoryFilter.astro";
+import { getPosts, usedCategories } from "../../lib/posts";
+
+const posts = await getPosts();
+const description = "Technical articles on platform engineering, Linux, automation, GitOps, and security.";
+---
+
+<BaseLayout title="Blog" description={description}>
+  <section class="container listing" aria-labelledby="blog-title">
+    <header class="listing__header">
+      <h1 id="blog-title" class="listing__title">Blog</h1>
+      <p class="listing__intro">{description}</p>
+      <CategoryFilter available={usedCategories(posts)} />
+    </header>
+    <PostList posts={posts} emptyMessage="No articles have been published yet. The first articles are being prepared." />
+  </section>
+</BaseLayout>
+
+<style>
+  .listing {
+    padding-top: var(--space-page-start);
+  }
+
+  .listing__header {
+    display: grid;
+    gap: var(--space-4);
+    justify-items: start;
+    margin-bottom: var(--space-6);
+  }
+
+  .listing__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-size: var(--step-h1);
+  }
+
+  .listing__title::before {
+    content: "";
+    flex: none;
+    width: 6px;
+    height: 0.85em;
+    background: var(--accent-change);
+  }
+
+  .listing__intro {
+    max-width: var(--measure);
+    color: var(--text-secondary);
+    font-size: var(--step-body-lg);
+  }
+</style>

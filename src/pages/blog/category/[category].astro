@@ -1,0 +1,66 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PostList from "../../../components/PostList.astro";
+import CategoryFilter from "../../../components/CategoryFilter.astro";
+import { CATEGORIES, type CategorySlug } from "../../../config/categories";
+import { getPosts, postsInCategory, usedCategories, type Post } from "../../../lib/posts";
+
+// Only categories with at least one post get a page; no empty category pages.
+export async function getStaticPaths() {
+  const posts = await getPosts();
+  const used = usedCategories(posts);
+  return CATEGORIES.filter((c) => used.has(c.slug)).map((c) => ({
+    params: { category: c.slug },
+    props: { category: c, posts },
+  }));
+}
+
+interface Props {
+  category: (typeof CATEGORIES)[number];
+  posts: Post[];
+}
+
+const { category, posts } = Astro.props;
+const inCategory = postsInCategory(posts, category.slug as CategorySlug);
+const description = `Articles about ${category.label}.`;
+---
+
+<BaseLayout title={`${category.label} articles`} description={description}>
+  <section class="container listing" aria-labelledby="category-title">
+    <header class="listing__header">
+      <p class="listing__eyebrow"><a href="/blog">Blog</a> / Category</p>
+      <h1 id="category-title" class="listing__title">{category.label}</h1>
+      <CategoryFilter available={usedCategories(posts)} current={category.slug as CategorySlug} />
+    </header>
+    <PostList posts={inCategory} />
+  </section>
+</BaseLayout>
+
+<style>
+  .listing {
+    padding-top: var(--space-page-start);
+  }
+
+  .listing__header {
+    display: grid;
+    gap: var(--space-4);
+    justify-items: start;
+    margin-bottom: var(--space-6);
+  }
+
+  .listing__eyebrow {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .listing__eyebrow a {
+    color: inherit;
+  }
+
+  .listing__title {
+    font-size: var(--step-h1);
+  }
+</style>

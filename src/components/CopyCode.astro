@@ -1,0 +1,58 @@
+---
+// Progressive enhancement for code blocks rendered by the Shiki transformer
+// in src/lib/shiki.ts. Without JavaScript, code blocks render normally and
+// the (hidden) copy buttons simply never appear.
+---
+
+<p class="visually-hidden" aria-live="polite" data-copy-status></p>
+
+<script>
+  const status = document.querySelector<HTMLElement>("[data-copy-status]");
+
+  /**
+   * For shell blocks written as a session (`$ cmd` lines mixed with output),
+   * copy only the commands, without the prompt. Lines ending in `\` carry
+   * the command onto the next line. Blocks with no `$ ` prompts copy as-is.
+   */
+  function shellCommands(text: string): string {
+    const lines = text.replace(/\n$/, "").split("\n");
+    if (!lines.some((line) => /^\s*\$ /.test(line))) return text;
+    const out: string[] = [];
+    let continuing = false;
+    for (const line of lines) {
+      const prompt = line.match(/^\s*\$ (.*)$/);
+      if (prompt) out.push(prompt[1]);
+      else if (continuing) out.push(line);
+      else continue;
+      continuing = /\\\s*$/.test(out[out.length - 1]);
+    }
+    return out.join("\n");
+  }
+
+  async function copy(text: string): Promise<boolean> {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  for (const figure of document.querySelectorAll<HTMLElement>("figure.code-block")) {
+    const button = figure.querySelector<HTMLButtonElement>(".code-block__copy");
+    const code = figure.querySelector("pre code") ?? figure.querySelector("pre");
+    if (!button || !code || !navigator.clipboard) continue;
+
+    button.hidden = false;
+    button.addEventListener("click", async () => {
+      const raw = code.textContent ?? "";
+      const text = figure.dataset.shell === "true" ? shellCommands(raw) : raw;
+      const ok = await copy(text);
+      button.textContent = ok ? "Copied" : "Copy failed";
+      if (status) status.textContent = ok ? "Code copied to clipboard" : "Copy failed";
+      window.setTimeout(() => {
+        button.textContent = "Copy";
+      }, 2000);
+    });
+  }
+</script>

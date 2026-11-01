@@ -10,6 +10,13 @@ export const SITE = {
     "Technical field notes on platform engineering, Linux, automation, GitOps, and security.",
   topics: ["Platform Engineering", "Linux", "Automation", "Security"] as const,
   github: "https://github.com/GMakeziG",
+  language: "en-US",
+} as const;
+
+/** Article byline and structured-data author (approved for Milestone 2). */
+export const AUTHOR = {
+  name: "Gerso Robayo-Guillen",
+  url: "https://github.com/GMakeziG",
 } as const;
 
 export interface NavItem {
