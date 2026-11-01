@@ -1,0 +1,61 @@
+---
+// Header/footer lockup: compact shuriken mark + flat "NINJATRONICS.IO_" wordmark
+// (Warm Paper text via currentColor; the trailing underscore is Vermilion).
+// The mark is an <img> of a single source SVG so every placement shares one
+// cached asset. The wordmark is live text (flat, no effects, per the Effects
+// Rule) and inherits currentColor, so it works on dark and light surfaces.
+interface Props {
+  href?: string;
+  /** Rendered mark size in px. */
+  size?: number;
+  /** Show the wordmark next to the mark. */
+  wordmark?: boolean;
+}
+
+const { href = "/", size = 40, wordmark = true } = Astro.props;
+---
+
+<a class="logo" href={href} aria-label="Ninjatronics home">
+  <img
+    class="logo__mark"
+    src="/brand/shuriken-mark-compact.svg"
+    width={size}
+    height={size}
+    alt=""
+    decoding="async"
+  />
+  {
+    wordmark && (
+      <span class="logo__wordmark" aria-hidden="true">
+        NINJATRONICS.IO<span class="logo__cursor">_</span>
+      </span>
+    )
+  }
+</a>
+
+<style>
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: var(--tap-target);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .logo__mark {
+    flex: none;
+  }
+
+  .logo__wordmark {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.25rem;
+    letter-spacing: -0.01em;
+    line-height: 1;
+  }
+
+  .logo__cursor {
+    color: var(--accent-change);
+  }
+</style>

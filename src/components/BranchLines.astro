@@ -1,0 +1,46 @@
+---
+// Supporting brand graphic: a flat git branch-and-merge diagram
+// (docs/design/ninjatronics-logo-reference6.png). The vermilion line is the
+// main/release branch; Muted Sage lines are feature branches that split off
+// and merge back. Always decorative (aria-hidden), always flat, never
+// behind body text.
+interface Props {
+  class?: string;
+}
+
+const { class: className } = Astro.props;
+---
+
+<svg
+  class:list={["branch-lines", className]}
+  viewBox="0 0 640 200"
+  preserveAspectRatio="xMinYMid meet"
+  aria-hidden="true"
+  focusable="false"
+>
+  <g fill="none" stroke-width="2.5" stroke-linecap="round">
+    <!-- feature branch (upper) -->
+    <path d="M110 100 C150 100 150 40 190 40 L430 40 C470 40 470 100 510 100" stroke="var(--graphic-branch)" />
+    <!-- feature branch (lower) -->
+    <path d="M220 100 C260 100 260 160 300 160 L400 160 C440 160 440 100 480 100" stroke="var(--graphic-branch)" stroke-opacity="0.7" />
+    <!-- main / release branch -->
+    <path d="M0 100 L640 100" stroke="var(--graphic-main)" />
+  </g>
+  <g stroke-width="2.5" fill="var(--surface-page)">
+    <circle cx="190" cy="40" r="7" stroke="var(--graphic-branch)" />
+    <circle cx="300" cy="40" r="7" stroke="var(--graphic-branch)" />
+    <circle cx="410" cy="40" r="7" stroke="var(--graphic-branch)" />
+    <circle cx="300" cy="160" r="7" stroke="var(--graphic-branch)" stroke-opacity="0.7" />
+    <circle cx="400" cy="160" r="7" stroke="var(--graphic-branch)" stroke-opacity="0.7" />
+    <circle cx="60" cy="100" r="7" stroke="var(--graphic-main)" />
+    <circle cx="350" cy="100" r="7" stroke="var(--graphic-main)" />
+    <circle cx="560" cy="100" r="9" stroke="var(--graphic-main)" />
+  </g>
+</svg>
+
+<style>
+  .branch-lines {
+    width: 100%;
+    height: auto;
+  }
+</style>

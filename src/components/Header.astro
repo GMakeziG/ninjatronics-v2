@@ -1,0 +1,90 @@
+---
+import Logo from "./Logo.astro";
+import { PRIMARY_NAV, isCurrentSection } from "../config/site";
+
+const { pathname } = Astro.url;
+---
+
+<header class="site-header">
+  <div class="container site-header__inner">
+    <Logo />
+    <nav class="site-nav" aria-label="Primary">
+      <ul>
+        {
+          PRIMARY_NAV.map((item) => (
+            <li>
+              <a href={item.href} aria-current={isCurrentSection(pathname, item.href) ? "page" : undefined}>
+                {item.label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .site-header {
+    border-bottom: var(--border-width) solid var(--border-subtle);
+  }
+
+  .site-header__inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    min-height: var(--header-height);
+  }
+
+  .site-nav ul {
+    display: flex;
+    gap: var(--space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .site-nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-target);
+    padding-inline: var(--space-3);
+    color: var(--text-primary);
+    font-size: var(--step-small);
+    font-weight: 500;
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    transition: color var(--duration-fast) var(--ease-standard);
+  }
+
+  .site-nav a:hover {
+    color: var(--accent-link);
+  }
+
+  .site-nav a[aria-current="page"] {
+    border-bottom-color: var(--accent-change);
+  }
+
+  /* Narrow screens: brand on one row, nav on a second full-width row.
+     No JavaScript menu needed for four links. */
+  @media (max-width: 40rem) {
+    .site-header__inner {
+      flex-wrap: wrap;
+      gap: 0;
+      padding-block: var(--space-2);
+    }
+
+    .site-nav {
+      width: 100%;
+    }
+
+    .site-nav ul {
+      justify-content: space-between;
+    }
+
+    .site-nav a {
+      padding-inline: var(--space-2);
+    }
+  }
+</style>

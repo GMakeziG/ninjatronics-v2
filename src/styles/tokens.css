@@ -1,0 +1,110 @@
+/*
+ * Ninjatronics v2 design tokens.
+ *
+ * Three layers:
+ *   1. Brand primitives: the six approved colors, never used directly by
+ *      components.
+ *   2. Semantic roles: what components consume (surface, text, accent…).
+ *      The default (`:root`) is the dark theme.
+ *   3. Scale tokens: type, spacing, radius, layout. These are theme-independent.
+ *
+ * Adding a light article-reading mode later means adding ONE block that
+ * remaps layer 2 (e.g. `[data-theme="light"] { --surface-page: var(--brand-paper); … }`),
+ * with no component changes. Contrast notes for that future block:
+ *   - Teal on Warm Paper is 1.60:1 and Muted Sage on Warm Paper is 1.80:1,
+ *     so neither may be used for text in light mode. They stay decorative only.
+ *   - Vermilion on Warm Paper is 3.14:1, so it's limited to large text (24px+) and
+ *     non-text indicators in light mode.
+ *
+ * Brand rules (Canva Brand Update, docs/design/ninjatronics-logo-reference2/3.png):
+ *   - Vermilion signals change: diffs, emphasis, main/release branch, actions.
+ *   - Teal is an accent only. Glow appears ONLY on the logo's `>_` prompt.
+ *   - Everything else stays flat: no glows, gradients, or shadows on UI.
+ */
+
+:root {
+  /* 1. Brand primitives (approved palette) */
+  --brand-ink: #101214;      /* Ink Black:  primary background */
+  --brand-graphite: #1c2124; /* Graphite:   surfaces and panels */
+  --brand-paper: #f0ede6;    /* Warm Paper: text and light surfaces */
+  --brand-vermilion: #e15a3b;/* Vermilion:  change, emphasis, main branch */
+  --brand-sage: #a8b6ae;     /* Muted Sage: supporting text, secondary elements */
+  --brand-teal: #2fd3c6;     /* Signal Teal: accent only */
+
+  /* Derived shades (computed from the palette, not new brand colors) */
+  --derived-card: #171a1d;    /* between Ink and Graphite; keeps vermilion labels AA (4.76:1) */
+  --derived-line: #2a3034;    /* hairline borders on Ink */
+  --derived-line-strong: #3a4247;
+
+  /* 2. Semantic roles: dark theme (default) */
+  color-scheme: dark;
+  --surface-page: var(--brand-ink);
+  --surface-panel: var(--brand-graphite);
+  --surface-card: var(--derived-card);
+  --border-subtle: var(--derived-line);
+  --border-strong: var(--derived-line-strong);
+
+  --text-primary: var(--brand-paper);    /* 16.06:1 on Ink */
+  --text-secondary: var(--brand-sage);   /*  8.91:1 on Ink */
+  --text-on-action: var(--brand-ink);    /*  5.12:1 on Vermilion */
+
+  --accent-change: var(--brand-vermilion); /* 5.12:1 on Ink, 4.76:1 on card */
+  --accent-link: var(--brand-teal);        /* 10.06:1 on Ink */
+  --focus-ring: var(--brand-vermilion);
+
+  --graphic-main: var(--brand-vermilion);  /* main/release branch line */
+  --graphic-branch: var(--brand-sage);     /* feature branch lines */
+  --graphic-accent: var(--brand-teal);
+
+  /* 3. Typography */
+  --font-display: "Space Grotesk Variable", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* Fluid type scale: min at 390px viewport, max at 1440px */
+  --step-hero: clamp(2.375rem, 1.7rem + 2.8vw, 3.75rem);
+  --step-h1: clamp(2rem, 1.5rem + 2vw, 3rem);
+  --step-h2: clamp(1.5rem, 1.3rem + 0.9vw, 2rem);
+  --step-h3: clamp(1.125rem, 1.05rem + 0.35vw, 1.3125rem);
+  --step-body-lg: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem);
+  --step-body: 1.0625rem;  /* 17px UI body; articles use body-lg */
+  --step-small: 0.9375rem; /* 15px */
+  --step-meta: 0.8125rem;  /* 13px mono metadata */
+  --step-micro: 0.75rem;   /* 12px mono labels */
+
+  --leading-tight: 1.05;
+  --leading-heading: 1.2;
+  --leading-body: 1.6;
+  --tracking-display: -0.02em;
+  --tracking-label: 0.08em;
+  --measure: 68ch; /* reading width: 62–72 characters */
+
+  /* Spacing (4px base) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 6rem;
+
+  /* Shape and layout */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --border-width: 1px;
+  --focus-width: 2px;
+  --tap-target: 44px;
+  --content-max: 72rem; /* 1152px */
+  --gutter: clamp(1rem, 0.5rem + 2.5vw, 2.5rem);
+  --header-height: 4.5rem;
+  /* Responsive page rhythm: top padding of page bodies, and the gap
+     between the last content block and the footer. */
+  --space-page-start: clamp(2rem, 1rem + 4vw, 4rem);
+  --space-section-end: clamp(2rem, 1rem + 3vw, 4rem);
+
+  /* Motion: state changes only, no decorative animation */
+  --duration-fast: 120ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}

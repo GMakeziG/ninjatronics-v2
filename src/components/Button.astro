@@ -1,0 +1,56 @@
+---
+// Link-styled button. Primary = vermilion fill with Ink text (5.12:1;
+// Warm Paper on vermilion is only 3.14:1). Secondary = flat teal outline.
+interface Props {
+  href: string;
+  variant?: "primary" | "secondary";
+  arrow?: boolean;
+}
+
+const { href, variant = "primary", arrow = false } = Astro.props;
+---
+
+<a class:list={["button", `button--${variant}`]} href={href}>
+  <slot />
+  {arrow && <span class="button__arrow" aria-hidden="true">→</span>}
+</a>
+
+<style>
+  .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: var(--tap-target);
+    padding: var(--space-2) var(--space-5);
+    border: var(--border-width) solid transparent;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: var(--step-small);
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    transition:
+      background-color var(--duration-fast) var(--ease-standard),
+      color var(--duration-fast) var(--ease-standard);
+  }
+
+  .button--primary {
+    background: var(--accent-change);
+    color: var(--text-on-action);
+  }
+
+  .button--primary:hover {
+    background: var(--brand-paper);
+  }
+
+  .button--secondary {
+    border-color: var(--accent-link);
+    color: var(--accent-link);
+  }
+
+  .button--secondary:hover {
+    background: var(--accent-link);
+    color: var(--text-on-action);
+  }
+</style>

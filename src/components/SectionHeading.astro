@@ -1,0 +1,62 @@
+---
+// Section title with the vermilion marker bar from the reference layout,
+// plus an optional trailing link (e.g. "View Archive →").
+interface Props {
+  id: string;
+  title: string;
+  link?: { label: string; href: string };
+}
+
+const { id, title, link } = Astro.props;
+---
+
+<div class="section-heading">
+  <h2 id={id}>{title}</h2>
+  {
+    link && (
+      <a href={link.href}>
+        {link.label} <span aria-hidden="true">→</span>
+      </a>
+    )
+  }
+</div>
+
+<style>
+  .section-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-4);
+    margin-bottom: var(--space-5);
+  }
+
+  h2 {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-size: var(--step-h2);
+  }
+
+  h2::before {
+    content: "";
+    flex: none;
+    width: 6px;
+    height: 0.9em;
+    background: var(--accent-change);
+  }
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--tap-target);
+    font-size: var(--step-small);
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+</style>

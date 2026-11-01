@@ -1,0 +1,25 @@
+# build output
+dist/
+.astro/
+
+# dependencies
+node_modules/
+
+# logs
+*.log
+npm-debug.log*
+
+# environment / secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+
+# Cloudflare local state (Milestone 5)
+.wrangler/
+
+# OS / editor
+.DS_Store
+.vscode/*
+!.vscode/extensions.json

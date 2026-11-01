@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-128 -128 256 256" width="256" height="256" role="img" aria-label="Ninjatronics">
+  <!-- PROPOSED reconstruction of docs/design/ninjatronics-logo-reference4.png
+       (symmetrical four-blade shuriken, vermilion enso, teal >_ prompt).
+       Primary/full variant: brush texture on the enso + restrained prompt glow.
+       Pending owner approval. -->
+  <defs>
+    <linearGradient id="bladeLight" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4f5f6"/>
+      <stop offset="1" stop-color="#9aa1a7"/>
+    </linearGradient>
+    <linearGradient id="bladeDark" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7d848a"/>
+      <stop offset="1" stop-color="#363c41"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d3d7db"/>
+      <stop offset="1" stop-color="#4f565c"/>
+    </linearGradient>
+    <filter id="promptGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+      <feComponentTransfer in="blur" result="soft">
+        <feFuncA type="linear" slope="0.75"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode in="soft"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <g id="blade">
+      <path d="M0,-122 Q-17,-62 -31.11,-31.11 L0,0 Z" fill="url(#bladeLight)"/>
+      <path d="M0,-122 Q17,-62 31.11,-31.11 L0,0 Z" fill="url(#bladeDark)"/>
+      <line x1="0" y1="-117" x2="0" y2="-44" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1"/>
+    </g>
+  </defs>
+
+  <!-- Enso: main brush stroke with an open gap, plus two thin dry-brush trails -->
+  <g fill="none" stroke="#e15a3b" stroke-linecap="round">
+    <circle r="88" stroke-width="15" stroke-dasharray="520 33" transform="rotate(-62)"/>
+    <circle r="96" stroke-width="2.5" stroke-opacity="0.55" stroke-dasharray="210 140 90 113" transform="rotate(-40)"/>
+    <circle r="80" stroke-width="2" stroke-opacity="0.45" stroke-dasharray="150 90 170 92" transform="rotate(10)"/>
+  </g>
+
+  <!-- Four symmetrical blades in an X -->
+  <use href="#blade" transform="rotate(45)"/>
+  <use href="#blade" transform="rotate(135)"/>
+  <use href="#blade" transform="rotate(225)"/>
+  <use href="#blade" transform="rotate(315)"/>
+
+  <!-- Center hub -->
+  <circle r="40" fill="#0c0e10" stroke="url(#rim)" stroke-width="4"/>
+  <circle r="34" fill="none" stroke="#2a3034" stroke-width="1"/>
+
+  <!-- CLI prompt: the only element allowed to glow -->
+  <g fill="none" stroke="#2fd3c6" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" filter="url(#promptGlow)">
+    <path d="M-19,-12 L-5,0 L-19,12"/>
+    <path d="M1,13 L20,13"/>
+  </g>
+</svg>

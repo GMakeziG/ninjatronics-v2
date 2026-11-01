@@ -1,0 +1,157 @@
+---
+// Article summary card (reference: "Latest Articles" row). Designed to take
+// real article data from the content collection in Milestone 2. Until then
+// the homepage renders it with `placeholder` set, which visibly labels the
+// card as a placeholder and renders no link.
+interface Props {
+  title: string;
+  category: string;
+  excerpt: string;
+  href?: string;
+  /** Publication date. Omitted for placeholders; never invented. */
+  date?: Date;
+  readingMinutes?: number;
+  placeholder?: boolean;
+  /** Heading level inside the surrounding section. */
+  headingLevel?: 2 | 3;
+}
+
+const {
+  title,
+  category,
+  excerpt,
+  href,
+  date,
+  readingMinutes,
+  placeholder = false,
+  headingLevel = 3,
+} = Astro.props;
+
+const Heading = `h${headingLevel}` as "h2" | "h3";
+const dateLabel = date?.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
+---
+
+<article class:list={["card", { "card--placeholder": placeholder }]}>
+  <div class="card__media" aria-hidden="true">
+    {placeholder && <span class="card__flag">Placeholder</span>}
+  </div>
+  <div class="card__body">
+    <p class="card__category">{category}</p>
+    <Heading class="card__title">
+      {href && !placeholder ? <a href={href}>{title}</a> : title}
+    </Heading>
+    <p class="card__excerpt">{excerpt}</p>
+    <p class="card__meta">
+      {dateLabel ? <time datetime={date!.toISOString()}>{dateLabel}</time> : <span>Date pending</span>}
+      {readingMinutes && <span>{readingMinutes} min read</span>}
+    </p>
+  </div>
+</article>
+
+<style>
+  .card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-card);
+    border: var(--border-width) solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: border-color var(--duration-fast) var(--ease-standard);
+  }
+
+  .card:has(a:hover),
+  .card:has(a:focus-visible) {
+    border-color: var(--border-strong);
+  }
+
+  .card--placeholder {
+    border-style: dashed;
+    border-color: var(--border-strong);
+  }
+
+  /* Flat media slot. Real articles may provide a cover image later; the
+     default is a quiet graphite panel with a single main-branch line. */
+  .card__media {
+    position: relative;
+    aspect-ratio: 16 / 7;
+    background:
+      linear-gradient(var(--graphic-main), var(--graphic-main)) left 50% / 100% 2px no-repeat,
+      var(--surface-panel);
+    opacity: 0.9;
+  }
+
+  .card--placeholder .card__media {
+    background:
+      linear-gradient(var(--border-strong), var(--border-strong)) left 50% / 100% 2px no-repeat,
+      var(--surface-panel);
+  }
+
+  .card__flag {
+    position: absolute;
+    top: var(--space-3);
+    left: var(--space-3);
+    padding: 2px var(--space-2);
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-page);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .card__body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-5) var(--space-5);
+  }
+
+  .card__category {
+    color: var(--accent-change);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .card__title {
+    font-size: var(--step-h3);
+  }
+
+  .card__title a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* Whole card is clickable via the title link's stretched hit area. */
+  .card__title a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+
+  .card__title a:hover {
+    text-decoration: underline;
+  }
+
+  .card__excerpt {
+    color: var(--text-secondary);
+    font-size: var(--step-small);
+  }
+
+  .card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-4);
+    margin-top: auto;
+    padding-top: var(--space-3);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-meta);
+  }
+</style>

@@ -1,0 +1,180 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Button from "../components/Button.astro";
+import SectionHeading from "../components/SectionHeading.astro";
+import ArticleCard from "../components/ArticleCard.astro";
+import BranchLines from "../components/BranchLines.astro";
+import { SITE } from "../config/site";
+
+// Milestone 1: no articles exist yet. These cards are explicit placeholders
+// (no invented titles, dates, or topics). Milestone 2 replaces this array
+// with the newest published entries from the blog content collection.
+const latest = Array.from({ length: 3 }, () => ({
+  category: "Pending migration",
+  title: "Article placeholder",
+  excerpt: "Published articles appear here once the blog engine and content migration are complete.",
+}));
+---
+
+<BaseLayout>
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="container hero__inner">
+      <div class="hero__copy">
+        <p class="hero__eyebrow">
+          <span class="hero__eyebrow-mark" aria-hidden="true"></span>
+          {SITE.topics.join(" / ")}
+        </p>
+        <h1 id="hero-title" class="hero__title">
+          {SITE.tagline[0]}
+          <span class="hero__title-accent">{SITE.tagline[1]}</span>
+        </h1>
+        <p class="hero__lede">{SITE.description}</p>
+        <div class="hero__actions">
+          <Button href="/blog" arrow>Read the Blog</Button>
+          <Button href="/about" variant="secondary">About</Button>
+        </div>
+      </div>
+
+      <div class="hero__art" aria-hidden="true">
+        <BranchLines class="hero__branches" />
+        <img
+          class="hero__mark"
+          src="/brand/shuriken-mark.svg"
+          width="360"
+          height="360"
+          alt=""
+          fetchpriority="high"
+        />
+      </div>
+    </div>
+  </section>
+
+  <section class="latest container" aria-labelledby="latest-title">
+    <SectionHeading id="latest-title" title="Latest Articles" link={{ label: "View Archive", href: "/blog" }} />
+    <div class="latest__grid">
+      {latest.map((article) => <ArticleCard {...article} placeholder />)}
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .hero {
+    overflow: hidden;
+    border-bottom: var(--border-width) solid var(--border-subtle);
+  }
+
+  .hero__inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.6fr);
+    align-items: center;
+    gap: var(--space-6);
+    padding-block: var(--space-9);
+  }
+
+  .hero__copy {
+    display: grid;
+    gap: var(--space-5);
+    justify-items: start;
+  }
+
+  .hero__eyebrow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .hero__eyebrow-mark {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    background: var(--accent-change);
+  }
+
+  .hero__title {
+    font-size: var(--step-hero);
+    line-height: var(--leading-tight);
+  }
+
+  .hero__title-accent {
+    display: block;
+    color: var(--accent-change);
+  }
+
+  .hero__lede {
+    max-width: 34rem;
+    color: var(--text-secondary);
+    font-size: var(--step-body-lg);
+  }
+
+  .hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    padding-top: var(--space-2);
+  }
+
+  /* Mark sits on the main branch line, like the logo-on-lines lockup in
+     ninjatronics-logo-reference4.png. Both children share one grid cell;
+     the lines extend right and are clipped by the hero (overflow: hidden).
+     :global() is required because the SVG is rendered by BranchLines.astro,
+     outside this file's style scope. */
+  .hero__art {
+    display: grid;
+    align-items: center;
+    justify-items: center;
+  }
+
+  .hero__art > :global(*) {
+    grid-area: 1 / 1;
+  }
+
+  .hero__art :global(.hero__branches) {
+    justify-self: start;
+    width: 190%;
+    max-width: none;
+    margin-left: -8%;
+    opacity: 0.5;
+  }
+
+  .hero__mark {
+    position: relative;
+    width: min(100%, 21rem);
+    height: auto;
+  }
+
+  .latest {
+    padding-top: var(--space-8);
+  }
+
+  .latest__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+    gap: var(--space-5);
+  }
+
+  @media (max-width: 52rem) {
+    .hero__inner {
+      grid-template-columns: 1fr;
+      padding-block: var(--space-7);
+    }
+
+    .hero__art {
+      order: -1;
+      justify-items: start;
+    }
+
+    .hero__art :global(.hero__branches) {
+      width: 150%;
+      margin-left: -20%;
+    }
+
+    .hero__mark {
+      width: 9rem;
+    }
+  }
+</style>
