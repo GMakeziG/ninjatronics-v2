@@ -62,7 +62,7 @@ serving ninjatronics.io, a client-side React SPA behind Cloudflare.
 | `/sitemap.xml` | `/sitemap-index.xml` | The legacy sitemap location | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
 | WordPress `/about-me` | `/about` | The old WordPress About Me page | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
 | WordPress `/feed` | `/rss.xml` | The old WordPress RSS feed | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
-| WordPress `/benefits-of-aerobic-exercise-for-the-mind-and-body/` ("Error Budgets") | `/blog/<slug>` | Through the article's `legacyUrls` once it's published in v2 | Blocked on article migration |
+| WordPress `/benefits-of-aerobic-exercise-for-the-mind-and-body/` ("Error Budgets") | `/blog/error-budgets` | Through the article's `legacyUrls` once it's published in v2 | Imported as draft (PR 4); not yet published |
 
 ### The five live notes: recommended mapping
 
