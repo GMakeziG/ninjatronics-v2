@@ -6,10 +6,16 @@ Worker (`ninjatronics`) until an approved cutover, and stays deployed
 afterwards as the rollback target.
 
 ```
-GitHub GMakeziG/ninjatronics-v2 ──(Workers Builds)──▶ Worker "ninjatronics-v2"
-   main                          → production version   (workers.dev today, behind Cloudflare Access; ninjatronics.io after cutover)
-   any other branch              → not built yet         (pull-request previews are deferred; see §3)
+GitHub GMakeziG/ninjatronics-v2
+   main ──(manual "Deploy staging" workflow + "staging" environment approval)──▶ Worker "ninjatronics-v2"
+                                    (workers.dev, behind Cloudflare Access; ninjatronics.io after cutover)
+   other branches → never deployed (pull-request previews are deferred; see §3)
 ```
+
+Deployments run only from the manually dispatched GitHub Actions workflow
+`.github/workflows/deploy-staging.yml` (see §3.1). Pushing or merging never
+deploys. Cloudflare Workers Builds is **not** connected: it accepts only
+user tokens, which can't be limited to a single Worker.
 
 Nothing in this repository can attach a hostname: `wrangler.jsonc` has no
 `routes` and no custom domains. The production domain is moved by hand, in
@@ -76,8 +82,8 @@ third-party origins. Keep it that way:
   `assetsInlineLimit: 0` in `astro.config.mjs`).
 - Code highlighting uses classes (`src/lib/shiki.ts`). After changing
   `shiki.ts`, rebuild with `npx astro build --force`: Astro caches rendered
-  Markdown and won't re-highlight otherwise. (Workers Builds always starts
-  clean.)
+  Markdown and won't re-highlight otherwise. (CI and the deploy workflow
+  always start clean.)
 - Anything that injects scripts (Cloudflare Web Analytics, Rocket Loader,
   Email Obfuscation, Zaraz) would be blocked. Enabling one means updating
   the CSP in the same change.
@@ -96,7 +102,7 @@ npm run deploy:check        # wrangler deploy --dry-run: validates config, uploa
 handling; use `preview:worker` to test those.
 
 Pull requests run the same checks in GitHub Actions (`.github/workflows/ci.yml`,
-read-only, no secrets).
+read-only, no secrets). The deploy workflow (§3.1) repeats them before deploying.
 
 ---
 
@@ -105,27 +111,133 @@ read-only, no secrets).
 Each step needs explicit approval. None of them touch the legacy Worker, DNS,
 or email.
 
-1. **GitHub:** create public repository `GMakeziG/ninjatronics-v2`, push `main`,
-   protect `main` (require the CI check, no force pushes).
-2. **Worker:** Cloudflare dashboard → Workers & Pages → Create → Import a
-   repository → `ninjatronics-v2`.
-   - Build command: `npm run build`
-   - Deploy command: `npx wrangler deploy`
-   - Non-production branch builds: **off** (pull-request previews are
-     deferred). When separately approved, use the deploy command
-     `npx wrangler versions upload`, never `npx wrangler deploy`, so a
-     branch can't replace the production version.
-   - Build variable: `NODE_VERSION=24`
-3. **Cloudflare Access:** Worker → Settings → Domains & Routes → enable
-   Cloudflare Access for the **workers.dev** route. Policy: allow only the
-   owner's email (one-time PIN). Verify the Access application's exact
-   hostname and its email-only Allow policy before trusting it.
+1. **GitHub:** public repository `GMakeziG/ninjatronics-v2`, `main` protected
+   (pull request + the "Check, test, and build" CI check, no force pushes or
+   deletion).
+2. **Worker (placeholder first):** Cloudflare dashboard → Workers & Pages →
+   Create → Worker → "Hello World" template → name exactly `ninjatronics-v2`
+   → Deploy. **Don't** import a repository or connect Git: the site is
+   deployed by the workflow in §3.1, not by Workers Builds.
+3. **Cloudflare Access, straight after creating the Worker:** Worker →
+   Settings → Domains & Routes → enable Cloudflare Access for the
+   **workers.dev** route. Policy: Allow, Include Emails = the owner's address
+   only, One-time PIN. Verify the Access application's exact hostname and its
+   email-only Allow policy (Policy Tester) before trusting it.
 4. **No staging DNS record.** Staging lives only on `workers.dev`.
 5. **Preview URLs are disabled** (`"preview_urls": false` in `wrangler.jsonc`).
    Every deploy applies that value, so they stay off even if toggled in the
    dashboard. Enabling pull-request previews later is a separate, approved
    change: set the value to `true` in a pull request, protect Preview URLs
-   with Access and verify it, then turn on non-production branch builds.
+   with Access and verify it.
+
+### 3.1 Staging deployments (GitHub Actions)
+
+`.github/workflows/deploy-staging.yml` deploys `main` to `ninjatronics-v2`. It
+runs only when dispatched by hand (**Actions → Deploy staging → Run
+workflow**, branch `main`, typing `ninjatronics-v2` to confirm), and only after
+the `staging` environment's reviewer approves.
+
+**GitHub environment `staging`** (Settings → Environments):
+
+| Setting | Value |
+|---|---|
+| Required reviewers | `GMakeziG` |
+| Prevent self-review | Off (the only maintainer must be able to approve) |
+| Allow administrators to bypass | Off |
+| Deployment branches | Selected branches: `main` |
+| Variable `STAGING_HOSTNAME` | The Worker's `workers.dev` hostname |
+| Variable `ACCESS_TEAM_DOMAIN` | The Zero Trust team domain (`<team>.cloudflareaccess.com`) |
+| Secret `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account ID |
+| Secret `CLOUDFLARE_API_TOKEN` | The token below |
+
+Create the environment **before** the first dispatch; GitHub would otherwise
+create it unprotected (the run would still fail, without secrets). Secrets
+are released to the job only after approval.
+
+**Cloudflare token:** account-owned, restricted to this one Worker.
+Manage Account → Account API Tokens → Create Token → Custom token:
+- Permission: **Workers, role Editor**, scope **Specified Workers →
+  `ninjatronics-v2`**. Nothing else: no zone, DNS, Workers Routes, Access,
+  storage, account-settings, or user permissions.
+- Expiry: 90 days. No IP filter (GitHub-hosted runners have no fixed IPs).
+- Paste the value once, directly into the `CLOUDFLARE_API_TOKEN` environment
+  secret. Never store it in a file or share it.
+- Any additional permission needs its own approval. (If Wrangler ever needs
+  the account-wide `workers.dev` subdomain lookup, the only foreseen addition
+  is Account → Workers Scripts → Read.)
+
+**What the workflow does:**
+1. Install, type-check, test, and build, with no Cloudflare credentials present.
+2. Validate the target: Worker name `ninjatronics-v2`, static assets only from
+   `./dist`, `workers_dev: true`, `preview_urls: false`, no routes or custom
+   domains, no bindings or runtime variables, no committed `account_id`.
+3. Dry run, then `wrangler deploy` (a failure fails the step).
+4. Verify the Worker's settings through the per-Worker API: `workers.dev`
+   enabled, preview URLs disabled.
+5. Verify anonymous requests are denied by Access (a redirect to
+   `<team>/cdn-cgi/access/login/<hostname>`, or 401/403; never site content).
+6. If step 4 or 5 fails after a successful deploy, contain automatically
+   (§3.3).
+
+Automatic containment covers **verification failures only**. If a run is
+**cancelled** or **times out** after the deploy step finished, GitHub skips
+the remaining steps: neither verification nor containment runs. Follow
+"Cancelled or interrupted runs" in §3.3.
+
+### 3.2 Token rotation (every 90 days)
+
+1. Create a replacement token with the same single-Worker scope (§3.1).
+2. Replace the `CLOUDFLARE_API_TOKEN` environment secret.
+3. Dispatch the workflow once and confirm it passes.
+4. Revoke the old token (Manage Account → Account API Tokens).
+
+Revoke immediately, rather than at expiry, if the token may have been exposed.
+
+### 3.3 Containment and recovery
+
+**Automatic:** when the deploy succeeded but a verification step failed, the
+workflow logs which verification failed and every recorded failure, then
+disables the `workers.dev` URL and preview URLs of `ninjatronics-v2` only, and
+marks the run failed.
+
+**Manual, if the log says "CONTAINMENT FAILED"** (act immediately):
+1. Dashboard → Workers & Pages → `ninjatronics-v2` → Settings → Domains &
+   Routes → disable **workers.dev** (and Preview URLs).
+2. Confirm from outside that the hostname no longer serves the site
+   (`curl -sI https://<hostname>/`; expect 404).
+3. If a credential problem is suspected, revoke the token and delete the
+   `CLOUDFLARE_API_TOKEN` environment secret.
+
+**Cancelled or interrupted runs** (no automatic containment): if a run was
+cancelled, timed out, or the runner failed **after** the "Deploy to
+ninjatronics-v2" step started, assume a new version may be live and
+unverified:
+1. Check the run log: did "Deploy to ninjatronics-v2" finish? If it never
+   started, nothing was deployed and no action is needed.
+2. Verify from outside, without credentials (any of these failing means
+   contain now):
+   - `curl -sI https://<hostname>/` redirects (302) to
+     `https://<team>.cloudflareaccess.com/cdn-cgi/access/login/<hostname>`;
+   - `curl -s -o /dev/null -w '%{http_code}' -H 'X-Requested-With: XMLHttpRequest' https://<hostname>/`
+     returns 401;
+   - no response contains the site's HTML.
+3. Dashboard → Workers & Pages → `ninjatronics-v2` → Settings → Domains &
+   Routes: workers.dev shows Cloudflare Access; Preview URLs disabled; no
+   custom domains or routes.
+4. **To contain:** disable **workers.dev** (and Preview URLs) on
+   `ninjatronics-v2` in the dashboard, then follow Recovery below.
+5. If everything checks out, dispatch the workflow again so the full
+   verification runs.
+
+**Recovery:**
+1. Investigate the Access application: destination hostname, the single
+   email-only Allow policy, One-time PIN login, Policy Tester results.
+2. Re-enable `workers.dev` in the dashboard only after Access is verified.
+3. Check anonymously that requests are redirected to the Access login.
+4. Dispatch the workflow again; it must pass every verification.
+
+Containment never touches `ninjatronics`, `mis-hermanos-pequenitos`, other
+Access applications, DNS, or `ninjatronics.io`.
 
 ### Staging smoke test
 
@@ -189,7 +301,10 @@ deployed for at least 30 days.
 **Bad content or a bad build (v2 stays on the domain):**
 - Dashboard → `ninjatronics-v2` → Deployments → roll back to the previous
   version (instant, no rebuild), **or**
-- `git revert <commit>` and push to `main`.
+- revert the change through a pull request to `main`, then dispatch the
+  deploy workflow (§3.1).
+
+**Staging exposure:** see §3.3, Containment and recovery.
 
 **Back to the legacy site (under 5 minutes, no rebuild):**
 1. Worker `ninjatronics-v2` → Domains & Routes → remove `ninjatronics.io`.

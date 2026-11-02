@@ -1,0 +1,250 @@
+# Manual staging deployment of the Cloudflare Worker "ninjatronics-v2".
+#
+# Separate from CI (ci.yml). Never runs on push or pull_request: only by hand,
+# only from main, only after the "staging" environment's required reviewer
+# approves (environment secrets are unavailable until then).
+#
+# The Cloudflare token is account-owned with the Workers Editor role scoped
+# to ninjatronics-v2 only. It cannot change any other Worker, DNS, routes,
+# custom domains, or Access. Every Cloudflare API call below is a per-Worker
+# endpoint that accepts that scope.
+#
+# If post-deploy verification fails, the job contains the exposure itself by
+# disabling the workers.dev URL and preview URLs of ninjatronics-v2 only.
+# See docs/deployment.md, "Containment and recovery".
+name: Deploy staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_worker:
+        description: Type the target Worker name (ninjatronics-v2) to confirm
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ninjatronics-v2 (staging)
+    if: github.ref == 'refs/heads/main' && inputs.confirm_worker == 'ninjatronics-v2'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: staging
+    env:
+      EXPECTED_WORKER: ninjatronics-v2
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js (version from .nvmrc)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # No Cloudflare credentials exist in the environment for these steps.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check, test, and build
+        run: |
+          npm run check
+          npm test
+          npm run build
+
+      - name: Validate deployment target
+        run: |
+          node --input-type=module <<'EOF'
+          import { unstable_readConfig, experimental_readRawConfig } from "wrangler";
+          import { existsSync } from "node:fs";
+          const c = unstable_readConfig({ config: "wrangler.jsonc" });
+          const raw = experimental_readRawConfig({ config: "wrangler.jsonc" }).rawConfig;
+          const errors = [];
+          const fail = (m) => errors.push(m);
+          const expected = process.env.EXPECTED_WORKER;
+          if (c.name !== expected) fail(`name is "${c.name}", expected "${expected}"`);
+          // Wrangler has no "custom_domains" property: a custom domain is a
+          // routes/route entry with custom_domain: true. Environment sections
+          // (env.<name>) can define their own routes, so none are allowed.
+          const routes = [...(c.routes ?? []), ...(c.route ? [c.route] : [])];
+          if (routes.some((r) => typeof r === "object" && r?.custom_domain)) fail("custom domains are configured (route entry with custom_domain: true)");
+          else if (routes.length > 0) fail("routes are configured");
+          if (Object.keys(raw.env ?? {}).length > 0) fail(`environment sections are not allowed (found env.${Object.keys(raw.env).join(", env.")}); they can define routes or custom domains`);
+          if (c.workers_dev !== true) fail("workers_dev must be true");
+          if (c.preview_urls !== false) fail("preview_urls must be false");
+          if (c.main) fail("a Worker script is configured; expected static assets only");
+          if (c.assets?.directory !== "./dist") fail(`assets.directory is "${c.assets?.directory}", expected "./dist"`);
+          if (c.account_id) fail("account_id must not be committed; it comes from CLOUDFLARE_ACCOUNT_ID");
+          const lists = ["kv_namespaces", "r2_buckets", "d1_databases", "services", "analytics_engine_datasets",
+            "vectorize", "hyperdrive", "dispatch_namespaces", "workflows", "send_email", "mtls_certificates",
+            "secrets_store_secrets", "pipelines", "tail_consumers", "containers"];
+          for (const k of lists) if ((c[k] ?? []).length > 0) fail(`unexpected binding: ${k}`);
+          if ((c.durable_objects?.bindings ?? []).length > 0) fail("unexpected Durable Object bindings");
+          if ((c.queues?.producers ?? []).length + (c.queues?.consumers ?? []).length > 0) fail("unexpected queues");
+          if ((c.logfwdr?.bindings ?? []).length > 0) fail("unexpected logfwdr bindings");
+          if (Object.keys(c.unsafe ?? {}).length > 0) fail("unexpected unsafe configuration");
+          for (const k of ["ai", "browser", "images", "version_metadata"]) if (c[k]) fail(`unexpected binding: ${k}`);
+          if (Object.keys(c.vars ?? {}).length > 0) fail("unexpected runtime vars");
+          for (const f of ["dist/index.html", "dist/404.html", "dist/_headers", "dist/_redirects"])
+            if (!existsSync(f)) fail(`missing build output: ${f}`);
+          if (errors.length) { for (const e of errors) console.log(`::error::${e}`); process.exit(1); }
+          console.log(`OK: Worker "${c.name}", assets-only (./dist), workers_dev=true, preview_urls=false, no routes, no custom domains, no bindings`);
+          EOF
+
+      - name: Dry run (validates the Worker bundle; uploads nothing)
+        run: npx wrangler deploy --dry-run --name "$EXPECTED_WORKER"
+
+      # Credentials exist only in the Cloudflare steps below.
+      - name: Deploy to ninjatronics-v2
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --name "$EXPECTED_WORKER" 2>&1 | tee deploy.log
+
+      # Authoritative check of the Worker's own settings through the
+      # per-Worker API (accepts "Individual Workers Editor"). Failures are
+      # also written to verification-failures.log for the containment step.
+      - name: Verify Worker settings (workers.dev on, preview URLs off)
+        id: settings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'EOF'
+          import { appendFileSync } from "node:fs";
+          const { CLOUDFLARE_API_TOKEN: token, CLOUDFLARE_ACCOUNT_ID: account, EXPECTED_WORKER: worker } = process.env;
+          const errors = [];
+          const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/workers/workers/${worker}`,
+            { headers: { Authorization: `Bearer ${token}` } });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok || !body.success) {
+            errors.push(`Worker settings lookup failed: HTTP ${res.status} ${JSON.stringify(body.errors ?? [])}`);
+          } else {
+            const w = body.result ?? {};
+            if (w.name !== worker) errors.push(`API returned Worker "${w.name}", expected "${worker}"`);
+            if (w.subdomain?.enabled !== true) errors.push(`workers.dev enabled is ${w.subdomain?.enabled}, expected true`);
+            if (w.subdomain?.previews_enabled !== false) errors.push(`preview URLs enabled is ${w.subdomain?.previews_enabled}, expected false`);
+            if (!errors.length) console.log(`OK: Worker "${w.name}": workers.dev enabled, preview URLs disabled`);
+          }
+          for (const e of errors) {
+            console.log(`::error::${e}`);
+            appendFileSync("verification-failures.log", `[Verify Worker settings] ${e}\n`);
+          }
+          if (errors.length) process.exit(1);
+          EOF
+
+      # Anonymous requests must be denied by Cloudflare Access. Observed
+      # behavior: a 302 redirect to <team>/cdn-cgi/access/login/<hostname>
+      # for normal requests, and a 401 for XHR-style requests. Any response
+      # carrying the site's own HTML marker fails, whatever its status.
+      - name: Verify Cloudflare Access denies anonymous requests
+        id: access
+        # Runs even if the settings check failed, so containment can report
+        # both verifications.
+        if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
+        env:
+          STAGING_HOSTNAME: ${{ vars.STAGING_HOSTNAME }}
+          ACCESS_TEAM_DOMAIN: ${{ vars.ACCESS_TEAM_DOMAIN }}
+        run: |
+          set -euo pipefail
+          failures=0
+          record() {
+            echo "::error::$1"
+            echo "[Verify Cloudflare Access] $1" >> verification-failures.log
+            failures=$((failures + 1))
+          }
+          if [ -z "$STAGING_HOSTNAME" ] || [ -z "$ACCESS_TEAM_DOMAIN" ]; then
+            record "STAGING_HOSTNAME and ACCESS_TEAM_DOMAIN must be set on the staging environment"
+            exit 1
+          fi
+          marker=$(grep -o '<meta name="generator" content="[^"]*"' dist/index.html | head -1 || true)
+          if [ -z "$marker" ]; then record "could not read the site marker from dist/index.html"; exit 1; fi
+          login_prefix="https://${ACCESS_TEAM_DOMAIN}/cdn-cgi/access/login/${STAGING_HOSTNAME}"
+          asset=$(ls dist/_astro/*.css | head -1); asset="/${asset#dist/}"
+          check() {
+            local label="$1"; shift
+            local out code location
+            if ! out=$(curl -sS -o body.tmp -w '%{http_code} %{redirect_url}' --max-time 20 "$@"); then
+              record "${label}: request failed"; return
+            fi
+            code=${out%% *}; location=${out#* }
+            if grep -qF "$marker" body.tmp; then
+              record "${label}: site content served without authentication (HTTP ${code})"; return
+            fi
+            case "$code" in
+              301|302|303|307|308)
+                case "$location" in
+                  "${login_prefix}"|"${login_prefix}?"*) echo "OK ${label}: ${code} redirect to Cloudflare Access login" ;;
+                  *) record "${label}: ${code} redirect does not go to the Access login for ${STAGING_HOSTNAME}" ;;
+                esac ;;
+              401|403) echo "OK ${label}: ${code} denied" ;;
+              *) record "${label}: unexpected HTTP ${code}" ;;
+            esac
+          }
+          for path in / /about /blog /does-not-exist /rss.xml "$asset"; do
+            check "GET ${path}" "https://${STAGING_HOSTNAME}${path}"
+          done
+          check "HEAD /" -I "https://${STAGING_HOSTNAME}/"
+          check "XHR GET /" -H "X-Requested-With: XMLHttpRequest" "https://${STAGING_HOSTNAME}/"
+          rm -f body.tmp
+          if [ "$failures" -ne 0 ]; then
+            echo "::error::${failures} anonymous request(s) were not denied by Cloudflare Access"
+            exit 1
+          fi
+
+      # Automatic containment. Runs only when the deploy step succeeded and a
+      # later step (the two verifications above) failed. Logs exactly which
+      # verification failed and why, then disables the workers.dev URL and
+      # preview URLs of ninjatronics-v2 only (per-Worker endpoint).
+      # It does NOT run if the run is cancelled (or times out) after the
+      # deploy: verification and containment are then skipped, and the manual
+      # procedure in docs/deployment.md, "Cancelled or interrupted runs",
+      # applies.
+      - name: Contain exposure (disable workers.dev on ninjatronics-v2)
+        if: failure() && steps.deploy.outcome == 'success'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_HOSTNAME: ${{ vars.STAGING_HOSTNAME }}
+          SETTINGS_OUTCOME: ${{ steps.settings.outcome }}
+          ACCESS_OUTCOME: ${{ steps.access.outcome }}
+        run: |
+          echo "::error::Deploy succeeded, but post-deploy verification failed. Containing."
+          echo "Verify Worker settings: ${SETTINGS_OUTCOME:-not run}"
+          echo "Verify Cloudflare Access: ${ACCESS_OUTCOME:-not run}"
+          if [ -s verification-failures.log ]; then
+            echo "Verification failures:"
+            cat verification-failures.log
+          else
+            echo "No verification failure was recorded; a step failed before writing its log."
+          fi
+          node --input-type=module <<'EOF'
+          const { CLOUDFLARE_API_TOKEN: token, CLOUDFLARE_ACCOUNT_ID: account, EXPECTED_WORKER: worker } = process.env;
+          const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${worker}/subdomain`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled: false, previews_enabled: false }),
+          }).catch((e) => ({ ok: false, status: `network error: ${e.message}`, json: async () => ({}) }));
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok || !body.success || body.result?.enabled !== false) {
+            console.log(`::error::CONTAINMENT FAILED (HTTP ${res.status}). Disable workers.dev for ${worker} in the dashboard now.`);
+            process.exit(1);
+          }
+          console.log(`::warning::Contained: workers.dev and preview URLs disabled for ${worker}. Follow docs/deployment.md, "Containment and recovery".`);
+          EOF
+          sleep 15
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://${STAGING_HOSTNAME}/" || true)
+          echo "workers.dev URL now returns HTTP ${code} (expected 404 once the change propagates)"
+          exit 1
