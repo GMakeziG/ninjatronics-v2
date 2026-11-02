@@ -20,7 +20,8 @@ export const ninjatronicsTheme: ThemeRegistration = {
   name: "ninjatronics-dark",
   type: "dark",
   colors: { "editor.background": C.bg, "editor.foreground": C.fg },
-  settings: [],
+  // Token rules go in `tokenColors` only. Shiki reads `settings` first when it
+  // exists, so even an empty `settings: []` would discard every rule below.
   tokenColors: [
     { settings: { foreground: C.fg, background: C.bg } },
     { scope: ["comment", "punctuation.definition.comment"], settings: { foreground: C.sage, fontStyle: "italic" } },
