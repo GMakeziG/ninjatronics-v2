@@ -7,7 +7,7 @@ description: "A repeatable checklist for diagnosing a Linux service that won't s
 pubDate: 2026-08-02
 category: "linux"
 tags: ["linux", "systemd", "troubleshooting"]
-draft: true
+draft: false
 legacyUrls: ["/valley/hall-of-knowledge/systemd-service-troubleshooting"]
 ---
 
