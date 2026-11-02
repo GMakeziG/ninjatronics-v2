@@ -19,8 +19,10 @@
     // build's slash-less URLs (build.format: "file").
     "html_handling": "auto-trailing-slash"
   },
-  // Staging: <name>.<subdomain>.workers.dev and per-version preview URLs,
-  // both protected by Cloudflare Access (configured in the dashboard).
+  // Staging: the <name>.<subdomain>.workers.dev URL is enabled and protected
+  // by Cloudflare Access (configured in the dashboard). Preview URLs are
+  // disabled until separately approved: every `wrangler deploy` applies this
+  // value, so a dashboard toggle can't silently re-enable them.
   "workers_dev": true,
-  "preview_urls": true
+  "preview_urls": false
 }
