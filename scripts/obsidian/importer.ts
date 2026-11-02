@@ -8,7 +8,12 @@
 // Safety rules:
 //   - Only <vault>/articles/** is read. Symlinks anywhere inside it are
 //     rejected, and every resolved file must stay inside it.
-//   - A note is imported only with `publish: true` AND `draft: false`.
+//   - A note is imported as a PUBLISHED article only with `publish: true` AND
+//     `draft: false` (and no `importDraft: true`).
+//   - A note is imported as a DRAFT article (written with `draft: true`, never
+//     built into production) only with `publish: true`, `draft: true`, AND
+//     `importDraft: true`. Drafts without `importDraft: true` are skipped, as
+//     before. Contradictory combinations are errors.
 //   - Only folders this importer created (frontmatter `importedFrom`) are ever
 //     written or deleted. Manually maintained articles are never touched.
 //   - Output is deterministic, and unchanged files aren't rewritten.
@@ -40,6 +45,10 @@ export interface PlannedArticle {
   slug: string;
   source: string; // vault-relative, e.g. articles/linux/Foo.md
   status: "create" | "update" | "unchanged";
+  /** The `draft` value written to the site article (true = never in production). */
+  draft: boolean;
+  /** For existing articles: their current `draft` value on disk, if readable. */
+  previousDraft?: boolean;
   /** File name → content, for everything in the article folder. */
   files: Map<string, Buffer>;
   /** For updates: files that change, and stale files to remove. */
@@ -77,6 +86,7 @@ const OBSIDIAN_ONLY = ["aliases", "cssclasses", "cssclass"];
 const ALLOWED_KEYS = [
   "publish",
   "draft",
+  "importDraft",
   "slug",
   "title",
   "description",
@@ -100,6 +110,7 @@ const noteSchema = z
   .object({
     publish: z.literal(true),
     draft: z.boolean({ error: "is required: set draft: false to publish (or true to keep the note unpublished)" }),
+    importDraft: z.boolean({ error: "must be true or false (true imports the note as an unpublished draft)" }).optional(),
     slug: z
       .string({ error: "is required: the URL path, e.g. slug: error-budgets" })
       .regex(SLUG_PATTERN, "must be lowercase words joined by hyphens, e.g. error-budgets")
@@ -125,6 +136,13 @@ const noteSchema = z
   .superRefine((data, ctx) => {
     if (data.cover && !data.coverAlt) ctx.addIssue({ code: "custom", path: ["coverAlt"], message: "is required when cover is set" });
     if (data.updatedDate && data.updatedDate < data.pubDate) ctx.addIssue({ code: "custom", path: ["updatedDate"], message: "can't be earlier than pubDate" });
+    if (data.importDraft === true && data.draft !== true) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["importDraft"],
+        message: "can only be true together with draft: true. A note can't be both published and an imported draft: remove importDraft to publish, or set draft: true.",
+      });
+    }
   });
 
 type NoteData = z.infer<typeof noteSchema>;
@@ -136,7 +154,9 @@ interface VaultNote {
   body: string;
   bodyStartLine: number;
   data?: NoteData;
-  state: "candidate" | "draft" | "unmarked" | "invalid";
+  // candidate: published import. staged: imported as a draft (importDraft: true).
+  // draft: skipped draft (no importDraft). unmarked: no publish: true.
+  state: "candidate" | "staged" | "draft" | "unmarked" | "invalid";
   anchors: Set<string>;
 }
 
@@ -217,7 +237,7 @@ async function readVault(articlesRoot: string, vaultRoot: string, errors: string
       note.state = "invalid";
       continue;
     }
-    note.state = result.data.draft ? "draft" : "candidate";
+    note.state = !result.data.draft ? "candidate" : result.data.importDraft === true ? "staged" : "draft";
     note.anchors = collectAnchors(parsed.body);
   }
   return notes;
@@ -228,6 +248,8 @@ interface SiteArticle {
   dir: string;
   managed: boolean;
   importedFrom?: string;
+  /** The article's current `draft` value, when its frontmatter states one. */
+  draft?: boolean;
 }
 
 async function readSite(contentDir: string): Promise<Map<string, SiteArticle>> {
@@ -236,6 +258,7 @@ async function readSite(contentDir: string): Promise<Map<string, SiteArticle>> {
     if (!entry.isDirectory()) continue;
     const dir = join(contentDir, entry.name);
     let importedFrom: string | undefined;
+    let draft: boolean | undefined;
     let source: string | undefined;
     for (const name of ["index.md", "index.mdx"]) {
       try {
@@ -249,10 +272,25 @@ async function readSite(contentDir: string): Promise<Map<string, SiteArticle>> {
       const frontmatter = source.replace(/\r\n?/g, "\n").match(/^---\n([\s\S]*?)\n---/);
       const match = frontmatter?.[1].match(/^importedFrom:\s*"?([^"\n]+)"?\s*$/m);
       importedFrom = match?.[1];
+      const draftMatch = frontmatter?.[1].match(/^draft:\s*(true|false)\s*$/m);
+      draft = draftMatch ? draftMatch[1] === "true" : undefined;
     }
-    site.set(entry.name, { slug: entry.name, dir, managed: importedFrom !== undefined, importedFrom });
+    site.set(entry.name, { slug: entry.name, dir, managed: importedFrom !== undefined, importedFrom, draft });
   }
   return site;
+}
+
+/**
+ * The `draft` value written to the site for an importable note. This is the
+ * only place that decides it, and it re-checks the vault metadata, so a note
+ * can only ever be written as published (draft: false) when it explicitly has
+ * publish: true, draft: false, and no importDraft: true.
+ */
+function draftFlagFor(note: VaultNote): boolean {
+  const data = note.data;
+  if (note.state === "candidate" && data?.publish === true && data.draft === false && data.importDraft !== true) return false;
+  if (note.state === "staged" && data?.publish === true && data.draft === true && data.importDraft === true) return true;
+  throw new Error(`Internal error: ${note.rel} has inconsistent publication metadata (state "${note.state}"). Nothing was written.`);
 }
 
 /** Resolve a file the note references, enforcing: exists, regular file, no symlink, inside articles/. */
@@ -321,13 +359,15 @@ export async function planImport(options: ImportOptions): Promise<ImportPlan> {
   const contentDir = resolve(options.contentDir);
 
   const notes = await readVault(articlesRoot, vaultRoot, errors);
-  const candidates = notes.filter((n) => n.state === "candidate");
+  // Everything the importer writes: published notes and imported drafts. Both
+  // go through the same slug, ownership, rename, and stale checks.
+  const importable = notes.filter((n) => n.state === "candidate" || n.state === "staged");
   plan.skippedDrafts = notes.filter((n) => n.state === "draft").map((n) => n.rel);
   plan.unmarkedCount = notes.filter((n) => n.state === "unmarked").length;
 
-  // Slug uniqueness among candidates.
+  // Slug uniqueness among everything that will be written.
   const bySlug = new Map<string, VaultNote>();
-  for (const note of candidates) {
+  for (const note of importable) {
     const other = bySlug.get(note.data!.slug);
     if (other) errors.push(`slug "${note.data!.slug}" is used by both ${other.rel} and ${note.rel}.`);
     else bySlug.set(note.data!.slug, note);
@@ -347,26 +387,33 @@ export async function planImport(options: ImportOptions): Promise<ImportPlan> {
   const notPublished = (note: VaultNote, label: string): Resolution<NoteRef> => ({
     ok: false,
     error:
-      note.state === "draft"
-        ? `${label} is still a draft (draft: true). Publish it first, or replace the link with plain text.`
-        : `${label} isn't published (needs publish: true and draft: false). Publish it, or replace the link with plain text.`,
+      note.state === "staged"
+        ? `${label} is imported only as a draft (importDraft: true). Publish it first, or replace the link with plain text.`
+        : note.state === "draft"
+          ? `${label} is still a draft (draft: true). Publish it first, or replace the link with plain text.`
+          : `${label} isn't published (needs publish: true and draft: false). Publish it, or replace the link with plain text.`,
   });
-  const resolveWikilink = (target: string): Resolution<NoteRef> => {
+  // A published article may only link to published articles (so it never links
+  // to a page missing from production). An imported draft may also link to
+  // other imported drafts; neither is built for production.
+  const canLink = (from: VaultNote, to: VaultNote) => to.state === "candidate" || (to.state === "staged" && from.state === "staged");
+  const linkTo = (from: VaultNote, to: VaultNote, label: string): Resolution<NoteRef> =>
+    canLink(from, to) ? { ok: true, value: refOf(to) } : notPublished(to, label);
+  const resolveWikilinkFrom = (from: VaultNote) => (target: string): Resolution<NoteRef> => {
     const key = target.replace(/\.md$/i, "").toLowerCase();
     const label = `[[${target}]]`;
     const direct = key.includes("/") ? byPath.get(key) : undefined;
     const matches = direct ? [direct] : (byName.get(key) ?? []);
     if (matches.length === 0) return { ok: false, error: `no note named "${target}" in articles/. Only published articles can be linked.` };
     if (matches.length > 1) return { ok: false, error: `"${target}" matches ${matches.map((m) => m.rel).join(" and ")}. Use a path, e.g. [[${matches[0].rel.replace(/^articles\//, "").replace(/\.md$/, "")}]].` };
-    const note = matches[0];
-    return note.state === "candidate" ? { ok: true, value: refOf(note) } : notPublished(note, label);
+    return linkTo(from, matches[0], label);
   };
 
   // Existing site articles.
   const site = await readSite(contentDir);
-  const candidateSources = new Set(candidates.map((n) => n.rel));
+  const candidateSources = new Set(importable.map((n) => n.rel));
 
-  for (const note of candidates) {
+  for (const note of importable) {
     const data = note.data!;
     if (bySlug.get(data.slug) !== note) continue; // duplicate slug, already reported
 
@@ -391,13 +438,13 @@ export async function planImport(options: ImportOptions): Promise<ImportPlan> {
       {
         title: data.title,
         selfAnchors: note.anchors,
-        resolveWikilink,
+        resolveWikilink: resolveWikilinkFrom(note),
         resolveMarkdownLink: (path) => {
           const abs = resolve(noteDir, path);
           if (!isInside(articlesRoot, abs)) return { ok: false, error: "links outside the vault's articles/ folder." };
           const target = notes.find((n) => n.abs === abs);
           if (!target) return { ok: false, error: `no note at ${toPosix(relative(articlesRoot, abs))} in articles/.` };
-          return target.state === "candidate" ? { ok: true, value: refOf(target) } : notPublished(target, path);
+          return linkTo(note, target, path);
         },
         resolveImage,
       },
@@ -428,6 +475,7 @@ export async function planImport(options: ImportOptions): Promise<ImportPlan> {
 
     if (transformed.errors.length || errors.some((e) => e.startsWith(`${note.rel}:`))) continue;
 
+    const draft = draftFlagFor(note);
     const frontmatter = serializeFrontmatter(
       [
         ["importedFrom", note.rel],
@@ -437,7 +485,7 @@ export async function planImport(options: ImportOptions): Promise<ImportPlan> {
         ["updatedDate", data.updatedDate],
         ["category", data.category],
         ["tags", data.tags.length ? data.tags : undefined],
-        ["draft", false],
+        ["draft", draft],
         ["cover", coverName ? `./${coverName}` : undefined],
         ["coverAlt", coverName ? data.coverAlt : undefined],
         ["toc", data.toc],
@@ -467,12 +515,12 @@ export async function planImport(options: ImportOptions): Promise<ImportPlan> {
       for (const name of onDisk) if (!files.has(name)) removed.push(name);
       status = changed.length || removed.length || renamedFrom ? "update" : "unchanged";
     }
-    plan.articles.push({ slug: data.slug, source: note.rel, status, files, changed, removed, renamedFrom });
+    plan.articles.push({ slug: data.slug, source: note.rel, status, draft, previousDraft: existing?.draft, files, changed, removed, renamedFrom });
   }
 
-  // Imported articles whose note is no longer publishable.
+  // Imported articles whose note is no longer importable (published or draft).
   const plannedSlugs = new Set(plan.articles.map((a) => a.slug));
-  const reservedByCandidates = new Set(candidates.map((n) => n.data!.slug));
+  const reservedByCandidates = new Set(importable.map((n) => n.data!.slug));
   for (const article of site.values()) {
     if (article.managed && !plannedSlugs.has(article.slug) && !reservedByCandidates.has(article.slug)) {
       plan.stale.push({ slug: article.slug, source: article.importedFrom! });
