@@ -7,7 +7,7 @@ This project is independent of the legacy React site (`~/src/ninjatronics`),
 which stays untouched and keeps serving ninjatronics.io until a production
 cutover is approved.
 
-**To publish an article, see [docs/authoring.md](docs/authoring.md).**
+**Articles are written in Obsidian and imported. See [docs/authoring.md](docs/authoring.md).**
 
 ## Commands
 
@@ -17,6 +17,12 @@ cutover is approved.
 | `npm run check`   | `astro check`: type-checks `.astro`, `.ts`, and content |
 | `npm run build`   | Production build to `dist/` (drafts excluded)       |
 | `npm run preview` | Serve the built `dist/` locally                     |
+| `npm run import:check` | Preview an Obsidian import (read-only)          |
+| `npm run import`  | Import approved vault notes into `src/content/blog/` (`-- --prune` to remove unpublished ones, with confirmation) |
+| `npm test`        | Importer test suite                                 |
+
+The vault path lives in `obsidian.local.json` (gitignored; see
+`obsidian.local.example.json`). No command here commits, pushes, or deploys.
 
 Requires Node 22.23.4 or later (`.nvmrc`: 24).
 
@@ -24,12 +30,15 @@ Requires Node 22.23.4 or later (`.nvmrc`: 24).
 
 ```
 docs/design/                 Approved brand and layout references (source of truth)
-docs/authoring.md            How to write and publish an article
+docs/authoring.md            Obsidian writing, import, publishing, and rollback workflow
+docs/obsidian/               Article template for the vault
 docs/migration/              Legacy URL inventory and redirect recommendations
+scripts/obsidian/            Vault importer: cli, importer (plan/apply), markdown, frontmatter, tests
 public/brand/                Logo marks and favicon sources (PROPOSED, pending approval)
 src/content/blog/<slug>/     Articles: index.md(x) + co-located images
 src/content.config.ts        Article schema (validated at build; fails closed)
-src/config/                  site.ts (identity, nav, author), categories.ts, redirects.ts
+src/config/                  site.ts (identity, nav, author), categories.ts, redirects.ts,
+                             content-rules.ts (shared by the site schema and the importer)
 src/lib/                     posts.ts (draft rule + queries), shiki.ts (theme + code blocks),
                              reading-time.ts, format.ts
 src/integrations/            prune-unreferenced-assets (keeps draft images out of dist/)
@@ -77,5 +86,5 @@ src/pages/                   index, blog/ (index, [slug], category/, tags/), rss
 - Default `og:image` deferred until the logo is approved.
 - Legacy React URL decisions: see docs/migration/legacy-react-urls.md.
 - Missing assets: WordPress uploads.
-- Deferred: heading anchor links and Obsidian-style `> [!note]` callouts in
-  plain `.md` (would need a custom Markdown plugin for Astro 7's new processor).
+- Deferred: heading anchor links (would need a custom plugin for Astro 7's
+  new Markdown processor). Obsidian callouts are handled by the importer.

@@ -18,6 +18,10 @@ export const STATIC_REDIRECTS: RedirectRule[] = [
   // docs/migration/legacy-react-urls.md). /valley, /floating-citadel, and
   // /hall-of-knowledge are deliberately NOT redirected until their
   // destinations are approved.
-  { from: "/mission-brief", to: "/about", note: "Legacy React: Mission Brief → About (provisional)" },
-  { from: "/git-forest", to: "/projects", note: "Legacy React: Git Forest → Projects (provisional)" },
+  // Sitemap-listed paths (the legacy app rendered NotFound for these):
+  { from: "/mission-brief", to: "/about", note: "Legacy React sitemap: Mission Brief → About (provisional)" },
+  { from: "/git-forest", to: "/projects", note: "Legacy React sitemap: Git Forest → Projects (provisional)" },
+  // Real legacy routes for the same two pages (approved 2026-11-01):
+  { from: "/brief", to: "/about", note: "Legacy React route: Mission Brief → About" },
+  { from: "/valley/git-forest", to: "/projects", note: "Legacy React route: Git Forest → Projects" },
 ];

@@ -10,7 +10,10 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "check": "astro check"
+    "check": "astro check",
+    "import": "node scripts/obsidian/cli.ts",
+    "import:check": "node scripts/obsidian/cli.ts --check",
+    "test": "node --test \"scripts/**/*.test.ts\""
   },
   "dependencies": {
     "@astrojs/mdx": "8.1.2",

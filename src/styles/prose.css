@@ -129,6 +129,58 @@
   text-transform: uppercase;
 }
 
+.prose mark {
+  padding: 0 0.15em;
+  background: color-mix(in srgb, var(--accent-change) 22%, transparent);
+  color: var(--text-primary);
+  border-radius: 2px;
+}
+
+/* Callouts: shared by the MDX <Callout> component and imported Obsidian
+   `> [!note]` callouts. Flat per the Effects Rule: a colored rule and label. */
+.prose .callout {
+  --callout-accent: var(--accent-link);
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface-card);
+  border: var(--border-width) solid var(--border-subtle);
+  border-left: 3px solid var(--callout-accent);
+  border-radius: var(--radius-sm);
+}
+
+.prose .callout--tip {
+  --callout-accent: var(--brand-sage);
+}
+
+.prose .callout--warning {
+  --callout-accent: var(--accent-change);
+}
+
+.prose .callout__label {
+  margin: 0 0 var(--space-2);
+  color: var(--callout-accent);
+  font-family: var(--font-mono);
+  font-size: var(--step-micro);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.prose .callout__title {
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: var(--step-small);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.prose .callout__body > * + * {
+  margin-top: var(--space-3);
+}
+
+.prose .callout__body > :first-child {
+  margin-top: 0;
+}
+
 /* Inline code */
 .prose :not(pre) > code {
   padding: 0.1em 0.35em;

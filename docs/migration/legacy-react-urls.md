@@ -51,26 +51,39 @@ serving ninjatronics.io, a client-side React SPA behind Cloudflare.
 |---|---|---|---|
 | `/mission-brief` | `/about` | Approved provisional mapping | **Implemented (provisional)** |
 | `/git-forest` | `/projects` | Approved provisional mapping | **Implemented (provisional)** |
-| `/brief` | `/about` | Real route for the same Mission Brief page | Recommended |
-| `/valley/git-forest` | `/projects` | Real route for the same Git Forest page | Recommended |
+| `/brief` | `/about` | Real route for the same Mission Brief page | **Implemented (approved)** |
+| `/valley/git-forest` | `/projects` | Real route for the same Git Forest page | **Implemented (approved)** |
 | `/valley/git-forest/<repo>` (8) | `/projects` | v2 has no per-repository pages. Alternative: 301 each to its GitHub repository. | Recommended |
 | `/valley/floating-citadel`, `/floating-citadel` | `/about#certifications` | You want certifications on About. Requires an About section with that anchor (Milestone 3). | Recommended, after M3 |
 | `/valley/floating-citadel/<cert>` (3) | `/about#certifications` | Same section; per-certificate pages aren't planned | Recommended, after M3 |
 | `/valley/hall-of-knowledge`, `/hall-of-knowledge` | `/blog` | The notes' new home is the blog | Recommended |
-| `/valley/hall-of-knowledge/<slug>` (5) | `/blog/<slug>` **if** the article is published in v2; otherwise `/blog` | These are live public URLs today. See decision below. | **Decision needed** |
+| `/valley/hall-of-knowledge/<slug>` (5) | `/blog/<same-slug>`, 1:1 | Live public articles. See the mapping below. | Recommended; activates per article on publish |
 | `/valley` | `/` | A hub page with no single successor; the homepage is the new overview. Alternatives: `/blog`, or let it 404. | Recommended, your call |
 
-### Decision needed: the five live notes
+### The five live notes: recommended mapping
 
-They're public now. At cutover, the options are:
+Owner direction (2026-11-01): preserve access to the five live notes; never
+redirect a live technical article to a generic page or the homepage; don't
+publish automatically.
 
-1. **Publish them in v2** (after your review in Milestone 3), keeping their
-   content and their `2026-07-22` date, with each old URL listed in the
-   article's `legacyUrls`. Old links land on the same article.
-2. **Keep them as v2 drafts** and redirect the five old URLs to `/blog`
-   until each is published. Old links still land somewhere relevant.
-3. **Keep them as v2 drafts with no redirect.** The old URLs return 404.
+**Recommendation:** each note keeps its existing slug and moves to
+`/blog/<same-slug>`, with a 1:1 permanent redirect from its old URL.
 
-Option 1 or 2 avoids broken links. Adding redirects is a one-line
-change: `legacyUrls` in the article frontmatter for option 1, or
-`src/config/redirects.ts` for option 2.
+| Live URL today | v2 destination | Legacy category → proposed v2 category |
+|---|---|---|
+| `/valley/hall-of-knowledge/systemd-service-troubleshooting` | `/blog/systemd-service-troubleshooting` | linux → `linux` |
+| `/valley/hall-of-knowledge/powershell-automation-principles` | `/blog/powershell-automation-principles` | automation → `automation` |
+| `/valley/hall-of-knowledge/active-directory-troubleshooting-workflow` | `/blog/active-directory-troubleshooting-workflow` | security → `security` |
+| `/valley/hall-of-knowledge/gitops-homelab-lessons` | `/blog/gitops-homelab-lessons` | kubernetes → `gitops` *(proposed; no kubernetes category in v2)* |
+| `/valley/hall-of-knowledge/documentation-before-change-philosophy` | `/blog/documentation-before-change-philosophy` | career → **decision needed** *(no career category; closest is `platform-engineering`)* |
+| `/valley/hall-of-knowledge` (index) | `/blog` | The blog index is the direct successor of the notes index, not a placeholder. |
+
+**How it works without auto-publishing:** each migrated note (Milestone 3)
+carries its old URL in `legacyUrls`. The redirect generator only emits
+`legacyUrls` for **published** articles, so a redirect appears when you
+publish that article, and never points at a missing or draft page.
+
+**Cutover gate:** don't switch DNS to v2 until all five are published in v2,
+or you've explicitly accepted that an unpublished one will return 404. A
+pre-cutover checklist item (Milestone 5) will compare this table against the
+generated `_redirects`.

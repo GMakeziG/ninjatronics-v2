@@ -9,9 +9,7 @@ import { defineCollection } from "astro:content";
 import { glob } from "astro/loaders";
 import { z } from "astro/zod";
 import { CATEGORY_SLUGS } from "./config/categories";
-
-const TAG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const PATH_PATTERN = /^\/[^\s?#]*$/;
+import { DESCRIPTION_MAX, PATH_PATTERN, TAG_PATTERN, TITLE_MAX } from "./config/content-rules";
 
 // Every entry, drafts included, is loaded and schema-validated, so a broken
 // draft still fails the build. Drafts are kept out of production output by
@@ -24,12 +22,12 @@ const blog = defineCollection({
   schema: ({ image }) =>
     z
       .object({
-        title: z.string().trim().min(1).max(120),
+        title: z.string().trim().min(1).max(TITLE_MAX),
         description: z
           .string()
           .trim()
           .min(1)
-          .max(160, "description must be 160 characters or fewer (used for search and social previews)"),
+          .max(DESCRIPTION_MAX, `description must be ${DESCRIPTION_MAX} characters or fewer (used for search and social previews)`),
         pubDate: z.coerce.date(),
         updatedDate: z.coerce.date().optional(),
         category: z.enum(CATEGORY_SLUGS),
@@ -46,6 +44,12 @@ const blog = defineCollection({
         legacyUrls: z
           .array(z.string().regex(PATH_PATTERN, "legacyUrls must be site-relative paths starting with '/'"))
           .default([]),
+        /**
+         * Set only by the Obsidian importer: the vault note this article was
+         * generated from (relative to the vault). Articles WITHOUT this field are
+         * manually maintained, and the importer never overwrites or prunes them.
+         */
+        importedFrom: z.string().regex(/^articles\/.+\.md$/).optional(),
       })
       .strict()
       .superRefine((data, ctx) => {

@@ -16,6 +16,9 @@ npm-debug.log*
 .dev.vars
 .dev.vars.*
 
+# Machine-specific settings (e.g. obsidian.local.json: local vault path)
+*.local.json
+
 # Cloudflare local state (Milestone 5)
 .wrangler/
 
