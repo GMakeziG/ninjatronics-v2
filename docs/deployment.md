@@ -176,13 +176,34 @@ Manage Account → Account API Tokens → Create Token → Custom token:
    enabled, preview URLs disabled.
 5. Verify anonymous requests are denied by Access (a redirect to
    `<team>/cdn-cgi/access/login/<hostname>`, or 401/403; never site content).
-6. If step 4 or 5 fails after a successful deploy, contain automatically
-   (§3.3).
+6. If the deploy step was attempted and step 4 or 5 doesn't succeed, contain
+   automatically (§3.3).
 
-Automatic containment covers **verification failures only**. If a run is
-**cancelled** or **times out** after the deploy step finished, GitHub skips
-the remaining steps: neither verification nor containment runs. Follow
-"Cancelled or interrupted runs" in §3.3.
+Steps 4 and 5 run whenever the deploy step was **attempted**, whatever its
+outcome (success, failure, or cancelled). Wrangler can activate a new version
+and still exit with an error, so a failed deploy step doesn't mean nothing
+changed. Containment runs when either verification doesn't end in success,
+whether it failed, timed out, was cancelled, or was skipped. A deployment
+whose two verifications both pass is never contained.
+
+| Situation | Verification | Containment |
+|---|---|---|
+| A step before the deploy fails (install, build, target check, dry run) | skipped | skipped (nothing deployed) |
+| Deploy succeeds, both verifications pass | runs, passes | skipped; `workers.dev` stays on |
+| Deploy succeeds, a verification fails | runs | **runs** |
+| Wrangler exits with an error, both verifications pass | runs, passes | skipped. The run is red and the new version may be live: review the deploy log and roll back if needed (§6) |
+| Wrangler exits with an error, a verification fails | runs | **runs** |
+| Deploy step exceeds its 10-minute timeout | runs | runs unless both pass |
+| Run cancelled normally (one click) during or after the deploy | best effort: attempted, not guaranteed | best effort: attempted unless both pass; if either step didn't finish, verify manually (§3.3) |
+
+**Timeouts:** every step has its own `timeout-minutes`. They add up to 51,
+below the job's 60, so a hung step fails by itself and verification and
+containment keep their time. The approval wait doesn't count toward the job
+timeout.
+
+Not covered automatically: a **job timeout**, a **forced cancellation** (a
+second cancel), a **lost runner**, or a log saying **"CONTAINMENT FAILED"**.
+Follow "Cancelled or interrupted runs" in §3.3.
 
 ### 3.2 Token rotation (every 90 days)
 
@@ -195,10 +216,11 @@ Revoke immediately, rather than at expiry, if the token may have been exposed.
 
 ### 3.3 Containment and recovery
 
-**Automatic:** when the deploy succeeded but a verification step failed, the
-workflow logs which verification failed and every recorded failure, then
-disables the `workers.dev` URL and preview URLs of `ninjatronics-v2` only, and
-marks the run failed.
+**Automatic:** when the deploy step was attempted and either verification
+didn't end in success, the workflow logs the deploy outcome, the outcome of
+each verification, and every recorded failure. It then disables the
+`workers.dev` URL and preview URLs of `ninjatronics-v2` only, and marks the
+run failed. See the table in §3.1.
 
 **Manual, if the log says "CONTAINMENT FAILED"** (act immediately):
 1. Dashboard → Workers & Pages → `ninjatronics-v2` → Settings → Domains &
@@ -208,10 +230,15 @@ marks the run failed.
 3. If a credential problem is suspected, revoke the token and delete the
    `CLOUDFLARE_API_TOKEN` environment secret.
 
-**Cancelled or interrupted runs** (no automatic containment): if a run was
-cancelled, timed out, or the runner failed **after** the "Deploy to
+**Cancelled or interrupted runs** (automatic containment not guaranteed):
+if the **job** timed out, the run was **force-cancelled**, the **runner was
+lost**, or verification or containment didn't finish, **after** the "Deploy to
 ninjatronics-v2" step started, assume a new version may be live and
-unverified:
+unverified. After a normal single cancellation, the workflow attempts
+verification and containment on a best-effort basis; this is not
+guaranteed. Unless the run log shows both verification steps finished
+with success, or containment finished with "Contained", treat the run as
+interrupted:
 1. Check the run log: did "Deploy to ninjatronics-v2" finish? If it never
    started, nothing was deployed and no action is needed.
 2. Verify from outside, without credentials (any of these failing means
