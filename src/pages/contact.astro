@@ -1,8 +1,107 @@
 ---
+// Contact (Milestone 3D). Content lives in src/data/contact.ts and
+// src/config/site.ts. Static: no form, no JavaScript, no obfuscation.
 import BaseLayout from "../layouts/BaseLayout.astro";
-import PendingContent from "../components/PendingContent.astro";
+import PageHeader from "../components/PageHeader.astro";
+import SectionHeading from "../components/SectionHeading.astro";
+import { CONTACT } from "../data/contact";
+import { AUTHOR, SITE } from "../config/site";
+
+const description = "Contact Gerso Robayo-Guillen about DevOps, platform engineering, infrastructure automation, and technical collaboration.";
+
+// Limited to the approved public contact details.
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "ContactPage",
+  name: "Contact",
+  url: new URL("/contact", SITE.url).href,
+  mainEntity: {
+    "@type": "Person",
+    name: AUTHOR.name,
+    email: `mailto:${CONTACT.email}`,
+    sameAs: [SITE.github, SITE.linkedin],
+  },
+};
 ---
 
-<BaseLayout title="Contact" description="Ways to get in touch.">
-  <PendingContent title="Contact" intro="Ways to get in touch." />
+<BaseLayout title="Contact" description={description} jsonLd={jsonLd}>
+  <div class="container contact">
+    <PageHeader id="contact-title" eyebrow="Contact / Get in Touch" title="Contact" lede={CONTACT.intro} />
+
+    <section aria-labelledby="channels">
+      <SectionHeading id="channels" title="Channels" />
+      <ul class="channels">
+        {
+          CONTACT.channels.map((channel) => (
+            <li class="channel">
+              <span class="channel__label">{channel.label}</span>
+              <a class="channel__link" href={channel.href} rel={channel.isProfile ? "me" : undefined}>
+                {channel.display}
+              </a>
+              <span class="channel__note">{channel.note}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <p class="contact__closing">
+      {CONTACT.closing.lead} Browse my <a href={CONTACT.closing.projects}>projects</a> or read the <a href={CONTACT.closing.blog}>blog</a>.
+    </p>
+  </div>
 </BaseLayout>
+
+<style>
+  /* Single column at reading width, aligned with the other pages. */
+  .contact {
+    display: grid;
+    gap: var(--space-7);
+    padding-top: var(--space-page-start);
+  }
+
+  .contact > :global(*) {
+    max-width: var(--measure);
+  }
+
+  .channels {
+    display: grid;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* Same treatment as the Now page items: a thin sage rule. */
+  .channel {
+    display: grid;
+    justify-items: start;
+    padding: var(--space-1) var(--space-4);
+    border-left: 2px solid var(--graphic-branch);
+  }
+
+  .channel__label {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  /* Large, selectable link text; long addresses may wrap on narrow screens. */
+  .channel__link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-target);
+    font-size: var(--step-body-lg);
+    overflow-wrap: anywhere;
+  }
+
+  .channel__note {
+    color: var(--text-secondary);
+    font-size: var(--step-small);
+  }
+
+  .contact__closing {
+    color: var(--text-secondary);
+  }
+</style>

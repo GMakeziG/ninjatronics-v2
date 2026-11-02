@@ -37,7 +37,7 @@ const jsonLd = {
     name: AUTHOR.name,
     jobTitle: ABOUT.currentRoles.map((role) => role.title),
     worksFor: employers,
-    sameAs: [SITE.github, ABOUT.linkedin],
+    sameAs: [SITE.github, SITE.linkedin],
   },
 };
 ---
@@ -48,7 +48,7 @@ const jsonLd = {
       <ul class="about__meta" aria-label="Location and profiles">
         <li>{ABOUT.location}</li>
         <li><a href={SITE.github}>GitHub</a></li>
-        <li><a href={ABOUT.linkedin}>LinkedIn</a></li>
+        <li><a href={SITE.linkedin}>LinkedIn</a></li>
       </ul>
       <p class="about__intro">{ABOUT.introduction}</p>
     </PageHeader>

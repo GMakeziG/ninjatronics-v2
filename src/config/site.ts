@@ -10,6 +10,7 @@ export const SITE = {
     "Technical field notes on platform engineering, Linux, automation, GitOps, and security.",
   topics: ["Platform Engineering", "Linux", "Automation", "Security"] as const,
   github: "https://github.com/GMakeziG",
+  linkedin: "https://www.linkedin.com/in/gerso-guillen/",
   language: "en-US",
 } as const;
 

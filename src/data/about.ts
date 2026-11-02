@@ -66,7 +66,6 @@ const aboutSchema = z.object({
   headline: z.string().min(1),
   location: z.string().min(1),
   introduction: z.string().min(1),
-  linkedin: httpsUrl,
   currentRolesIntro: z.string().min(1),
   currentRoles: z.array(currentRoleSchema).min(1),
   focusAreas: z.array(
@@ -118,7 +117,6 @@ export const ABOUT: AboutContent = aboutSchema.parse({
   location: "Southern California",
   introduction:
     "I've worked in IT for more than 20 years, across systems administration, infrastructure, security, and IT leadership. My current focus is DevOps, automation, and platform engineering: building systems that are repeatable, secure, and easier to run, and documenting what I learn along the way.",
-  linkedin: "https://www.linkedin.com/in/gerso-guillen/",
 
   currentRolesIntro: "I hold three concurrent roles: one in a technical career, two in nonprofit IT leadership.",
   currentRoles: [

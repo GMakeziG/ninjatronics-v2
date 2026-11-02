@@ -44,12 +44,12 @@ src/lib/                     posts.ts (draft rule + queries), shiki.ts (theme + 
 src/integrations/            prune-unreferenced-assets (keeps draft images out of dist/)
 src/styles/                  tokens.css, global.css, prose.css (article body)
 src/layouts/                 BaseLayout (meta/SEO), ArticleLayout
-src/components/              Header, Footer, Logo, Button, SectionHeading, ArticleCard, PostList,
-                             CategoryFilter, TagList, TableOfContents, Callout, CopyCode,
-                             BranchLines, PendingContent
+src/components/              Header, Footer, Logo, Button, PageHeader, SectionHeading, ChipList,
+                             ArticleCard, PostList, CategoryFilter, TagList, TableOfContents,
+                             Callout, CopyCode, BranchLines; about/ and projects/ page parts
 src/pages/                   index, blog/ (index, [slug], category/, tags/), rss.xml, robots.txt,
-                             [redirects] (→ dist/_redirects), about/now/projects/contact
-                             (placeholders until M3), brand-preview (temporary)
+                             [redirects] (→ dist/_redirects), about, projects, now, contact
+                             (content in src/data/), brand-preview (temporary)
 ```
 
 ## Generated files
