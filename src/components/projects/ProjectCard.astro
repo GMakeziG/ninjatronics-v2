@@ -1,0 +1,154 @@
+---
+// One featured project. Every card has the same structure and styling;
+// the flagship only differs in width (set by the page grid).
+//
+// Status: flat text with a small dot. Vermilion for Active only (vermilion
+// signals change), Muted Sage for other states, a hollow dot with dimmed
+// text for Paused. No glow or fill.
+import ChipList from "../ChipList.astro";
+import type { FeaturedProject } from "../../data/projects";
+
+interface Props {
+  project: FeaturedProject;
+  /** Resolved related article, if any. */
+  article?: { title: string; href: string };
+}
+
+const { project, article } = Astro.props;
+const tone = project.status.label === "Active" ? "active" : project.status.label === "Paused" ? "paused" : "neutral";
+const headingId = `${project.id}-title`;
+---
+
+<article id={project.id} class:list={["project", { "project--wide": project.wide }]} aria-labelledby={headingId}>
+  {project.extraAnchors.map((id) => <span id={id} class="project__anchor"></span>)}
+  <p class="project__meta">
+    <span>{project.category}</span>
+    <span class={`project__status project__status--${tone}`}>
+      <span class="visually-hidden">Status: </span>{project.status.label}
+    </span>
+  </p>
+  <h3 id={headingId} class="project__name">{project.name}</h3>
+  <p class="project__summary">{project.summary}</p>
+  <ChipList items={project.tech} label={`${project.name} technologies`} />
+  {
+    (project.repositories.length > 0 || article) && (
+      <ul class="project__links">
+        {project.repositories.map((r) => (
+          <li>
+            <a href={r.url}>
+              {project.repositories.length > 1 ? r.label : "Repository"}
+              <span class="visually-hidden"> for {project.name} on GitHub</span>
+              <span aria-hidden="true">&nbsp;↗</span>
+            </a>
+          </li>
+        ))}
+        {article && (
+          <li class="project__article">
+            <span class="project__link-label">Article:</span> <a href={article.href}>{article.title}</a>
+          </li>
+        )}
+      </ul>
+    )
+  }
+</article>
+
+<style>
+  .project {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-5);
+    background: var(--surface-card);
+    border: var(--border-width) solid var(--border-subtle);
+    border-radius: var(--radius-md);
+  }
+
+  /* Extra anchor at the card's top edge; out of the flex flow so it adds no gap. */
+  .project__anchor {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  .project__meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-3);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .project__status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-primary);
+  }
+
+  .project__status::before {
+    content: "";
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--graphic-branch);
+    border: 1.5px solid var(--graphic-branch);
+  }
+
+  .project__status--active::before {
+    background: var(--accent-change);
+    border-color: var(--accent-change);
+  }
+
+  .project__status--paused {
+    color: var(--text-secondary);
+  }
+
+  .project__status--paused::before {
+    background: transparent;
+  }
+
+  /* A step above h3 so names lead the card; derived from the h3 token. */
+  .project__name {
+    font-size: calc(var(--step-h3) * 1.15);
+  }
+
+  .project__summary {
+    max-width: var(--measure);
+    font-size: var(--step-small);
+  }
+
+  .project__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-5);
+    margin: auto 0 0;
+    padding: var(--space-1) 0 0;
+    list-style: none;
+    font-size: var(--step-small);
+  }
+
+  .project__links a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-target);
+  }
+
+  /* An article title can wrap, so it stays an inline link after its label. */
+  .project__article {
+    padding-block: var(--space-2);
+  }
+
+  .project__links .project__article a {
+    display: inline;
+    min-height: 0;
+  }
+
+  .project__link-label {
+    color: var(--text-secondary);
+  }
+</style>

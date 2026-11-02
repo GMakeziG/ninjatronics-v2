@@ -1,8 +1,142 @@
 ---
+// Projects (Milestone 3B). Content lives in src/data/projects.ts; this page
+// only lays it out. Successor of the legacy Git Forest pages: every legacy
+// /valley/git-forest/<repo> URL redirects to an anchor here.
 import BaseLayout from "../layouts/BaseLayout.astro";
-import PendingContent from "../components/PendingContent.astro";
+import PageHeader from "../components/PageHeader.astro";
+import SectionHeading from "../components/SectionHeading.astro";
+import ProjectCard from "../components/projects/ProjectCard.astro";
+import { PROJECTS } from "../data/projects";
+import { SITE } from "../config/site";
+import { getPublishedPosts, postPath } from "../lib/posts";
+
+// A related article must be published; a typo or unpublished slug fails the build.
+const posts = await getPublishedPosts();
+const articleFor = (slug?: string) => {
+  if (!slug) return undefined;
+  const post = posts.find((p) => p.id === slug);
+  if (!post) throw new Error(`src/data/projects.ts: related article "${slug}" is not a published article`);
+  return { title: post.data.title, href: postPath(post) };
+};
+
+const description = "Projects by Gerso Robayo-Guillen: a GitOps homelab, DevOps tooling, self-hosted services, and the Ninjatronics publishing pipeline.";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: "Projects",
+  url: new URL("/projects", SITE.url).href,
+  mainEntity: {
+    "@type": "ItemList",
+    itemListElement: PROJECTS.featured.map((project, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      item: {
+        "@type": "SoftwareSourceCode",
+        name: project.name,
+        description: project.summary,
+        ...(project.repositories[0] && { codeRepository: project.repositories[0].url }),
+      },
+    })),
+  },
+};
 ---
 
-<BaseLayout title="Projects" description="Case studies and technical projects.">
-  <PendingContent title="Projects" intro="Case studies and technical projects." />
+<BaseLayout title="Projects" description={description} jsonLd={jsonLd}>
+  <div class="container projects">
+    <PageHeader id="projects-title" eyebrow="Projects / The Workshop" title="Projects" lede={PROJECTS.intro} />
+
+    <section aria-labelledby="featured">
+      <SectionHeading id="featured" title="Featured projects" />
+      <div class="projects__grid">
+        {PROJECTS.featured.map((project) => <ProjectCard project={project} article={articleFor(project.relatedArticle)} />)}
+      </div>
+    </section>
+
+    <section aria-labelledby="learning">
+      <SectionHeading id="learning" title="Learning and practice" />
+      <p class="projects__section-intro">{PROJECTS.learningIntro}</p>
+      <ul class="learning">
+        {
+          PROJECTS.learning.map((item) => (
+            <li id={item.id} class="learning__item">
+              <a class="learning__name" href={item.url}>
+                {item.name}
+                <span class="visually-hidden"> on GitHub</span>
+                <span aria-hidden="true">&nbsp;↗</span>
+              </a>
+              <span class="learning__summary">{item.summary}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+  </div>
 </BaseLayout>
+
+<style>
+  .projects {
+    display: grid;
+    gap: var(--space-8);
+    padding-top: var(--space-page-start);
+  }
+
+  /* One column on mobile; two on wider screens, with the flagship spanning both. */
+  .projects__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+
+  @media (min-width: 48rem) {
+    .projects__grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .projects__grid > :global(.project--wide) {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .projects__section-intro {
+    max-width: var(--measure);
+    margin-bottom: var(--space-4);
+    color: var(--text-secondary);
+  }
+
+  .learning {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: var(--border-width) solid var(--border-subtle);
+  }
+
+  .learning__item {
+    display: grid;
+    gap: var(--space-1) var(--space-5);
+    padding-block: var(--space-3);
+    border-bottom: var(--border-width) solid var(--border-subtle);
+  }
+
+  @media (min-width: 48rem) {
+    .learning__item {
+      grid-template-columns: 16rem 1fr;
+      align-items: baseline;
+    }
+  }
+
+  .learning__name {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    min-height: var(--tap-target);
+    font-family: var(--font-mono);
+    font-size: var(--step-small);
+  }
+
+  .learning__summary {
+    color: var(--text-secondary);
+    font-size: var(--step-small);
+  }
+</style>

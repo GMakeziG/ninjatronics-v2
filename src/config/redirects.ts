@@ -15,9 +15,9 @@ export interface RedirectRule {
 }
 
 export const STATIC_REDIRECTS: RedirectRule[] = [
-  // Legacy React site (see docs/migration/legacy-react-urls.md). /valley,
-  // /hall-of-knowledge, and the repository pages are deliberately NOT
-  // redirected until their destinations are approved.
+  // Legacy React site (see docs/migration/legacy-react-urls.md). /valley and
+  // /hall-of-knowledge are deliberately NOT redirected until their
+  // destinations are approved.
   // Sitemap-listed paths (the legacy app rendered NotFound for these):
   { from: "/mission-brief", to: "/about", note: "Legacy React sitemap: Mission Brief → About (provisional)" },
   { from: "/git-forest", to: "/projects", note: "Legacy React sitemap: Git Forest → Projects (provisional)" },
@@ -32,5 +32,22 @@ export const STATIC_REDIRECTS: RedirectRule[] = [
     from: `/valley/floating-citadel/${slug}`,
     to: "/about#certifications",
     note: "Legacy React certification page → About certifications",
+  })),
+  // Git Forest repository pages, approved 2026-11-02: each goes to its
+  // project's anchor on /projects (anchor ids are the repository names; see
+  // src/data/projects.ts). Anchors are checked in the built HTML.
+  ...[
+    "cpp-practice",
+    "devops-devpod",
+    "devpod-dotfiles",
+    "go-practice",
+    "javascript-practice",
+    "lab",
+    "signalnode",
+    "skills-introduction-to-git",
+  ].map((repo) => ({
+    from: `/valley/git-forest/${repo}`,
+    to: `/projects#${repo}`,
+    note: "Legacy React repository page → Projects anchor",
   })),
 ];

@@ -53,7 +53,7 @@ serving ninjatronics.io, a client-side React SPA behind Cloudflare.
 | `/git-forest` | `/projects` | Approved provisional mapping | **Implemented (provisional)** |
 | `/brief` | `/about` | Real route for the same Mission Brief page | **Implemented (approved)** |
 | `/valley/git-forest` | `/projects` | Real route for the same Git Forest page | **Implemented (approved)** |
-| `/valley/git-forest/<repo>` (8) | `/projects` | v2 has no per-repository pages. Alternative: 301 each to its GitHub repository. | Recommended |
+| `/valley/git-forest/<repo>` (8) | `/projects#<repo>` | Each repository's project card or learning-list entry; the build verifies every target anchor exists | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
 | `/valley/floating-citadel`, `/floating-citadel` | `/about` | The district's successor is the About page | **Implemented (approved 2026-11-02)** |
 | `/valley/floating-citadel/<cert>` (3) | `/about#certifications` | About's certifications section; per-certificate pages aren't planned | **Implemented (approved 2026-11-02)** |
 | `/valley/hall-of-knowledge`, `/hall-of-knowledge` | `/blog` | The notes' new home is the blog | Recommended |

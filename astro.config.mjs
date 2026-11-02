@@ -4,6 +4,7 @@ import mdx from "@astrojs/mdx";
 import sitemap from "@astrojs/sitemap";
 import { ninjatronicsTheme, codeBlockTransformer } from "./src/lib/shiki.ts";
 import pruneUnreferencedAssets from "./src/integrations/prune-unreferenced-assets.ts";
+import validateRedirectAnchors from "./src/integrations/validate-redirect-anchors.ts";
 
 // Static output. `site` is the canonical origin for absolute URLs
 // (canonical links, Open Graph, RSS, sitemap).
@@ -32,5 +33,7 @@ export default defineConfig({
     }),
     // Keeps draft images out of dist/ (see the integration for details).
     pruneUnreferencedAssets(),
+    // Fails the build if a redirect points at a #fragment the page lacks.
+    validateRedirectAnchors(),
   ],
 });
