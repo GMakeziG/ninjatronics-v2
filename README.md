@@ -94,3 +94,15 @@ src/pages/                   index, blog/ (index, [slug], category/, tags/), rss
 - Missing assets: WordPress uploads.
 - Deferred: heading anchor links (would need a custom plugin for Astro 7's
   new Markdown processor). Obsidian callouts are handled by the importer.
+
+## License
+
+The MIT License applies to the **application code only**.
+
+- **Application code** (the Astro site, components, layouts, styles,
+  configuration, scripts, the Obsidian importer, and tests): MIT. See
+  [LICENSE](LICENSE).
+- **Everything else is excluded and all rights reserved:** articles, personal
+  and editorial content, logos, brand assets, and original graphics
+  (© Gerso Robayo-Guillen). See [CONTENT-LICENSE.md](CONTENT-LICENSE.md) for
+  the exact list of excluded files and folders.
