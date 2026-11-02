@@ -9,9 +9,18 @@
 # custom domains, or Access. Every Cloudflare API call below is a per-Worker
 # endpoint that accepts that scope.
 #
-# If post-deploy verification fails, the job contains the exposure itself by
+# Once the deploy step has been attempted (whatever its outcome: Wrangler can
+# activate a new version and still exit non-zero), both post-deploy
+# verifications run. If either one does not succeed (it failed, timed out, was
+# cancelled, or was skipped), the job contains the exposure itself by
 # disabling the workers.dev URL and preview URLs of ninjatronics-v2 only.
+# A verified deployment is never contained.
 # See docs/deployment.md, "Containment and recovery".
+#
+# Timeout budget: every step has its own timeout-minutes. They add up to 51,
+# below the 60-minute job timeout, so a hung step fails on its own and the
+# verification and containment steps keep their time. The approval wait before
+# the job starts does not count toward the job timeout.
 name: Deploy staging
 
 on:
@@ -34,18 +43,20 @@ jobs:
     name: Deploy ninjatronics-v2 (staging)
     if: github.ref == 'refs/heads/main' && inputs.confirm_worker == 'ninjatronics-v2'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     environment: staging
     env:
       EXPECTED_WORKER: ninjatronics-v2
       WRANGLER_SEND_METRICS: "false"
     steps:
       - name: Check out
+        timeout-minutes: 3
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Node.js (version from .nvmrc)
+        timeout-minutes: 5
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
@@ -53,15 +64,18 @@ jobs:
 
       # No Cloudflare credentials exist in the environment for these steps.
       - name: Install dependencies
+        timeout-minutes: 8
         run: npm ci
 
       - name: Type-check, test, and build
+        timeout-minutes: 10
         run: |
           npm run check
           npm test
           npm run build
 
       - name: Validate deployment target
+        timeout-minutes: 2
         run: |
           node --input-type=module <<'EOF'
           import { unstable_readConfig, experimental_readRawConfig } from "wrangler";
@@ -101,11 +115,15 @@ jobs:
           EOF
 
       - name: Dry run (validates the Worker bundle; uploads nothing)
+        timeout-minutes: 3
         run: npx wrangler deploy --dry-run --name "$EXPECTED_WORKER"
 
       # Credentials exist only in the Cloudflare steps below.
+      # The step timeout makes a hung Wrangler fail this step instead of
+      # using up the job's time, so verification and containment still run.
       - name: Deploy to ninjatronics-v2
         id: deploy
+        timeout-minutes: 10
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -116,8 +134,15 @@ jobs:
       # Authoritative check of the Worker's own settings through the
       # per-Worker API (accepts "Individual Workers Editor"). Failures are
       # also written to verification-failures.log for the containment step.
+      #
+      # Runs whenever the deploy step was attempted: success, failure, or
+      # cancelled (the only outcomes besides "skipped"). always() keeps it
+      # running after a failed deploy, and attempts it after a normal
+      # cancellation (best effort; see docs/deployment.md §3.3).
       - name: Verify Worker settings (workers.dev on, preview URLs off)
         id: settings
+        if: ${{ always() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure' || steps.deploy.outcome == 'cancelled') }}
+        timeout-minutes: 3
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -151,9 +176,11 @@ jobs:
       # carrying the site's own HTML marker fails, whatever its status.
       - name: Verify Cloudflare Access denies anonymous requests
         id: access
-        # Runs even if the settings check failed, so containment can report
-        # both verifications.
-        if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
+        # Same condition as the settings check: runs whenever the deploy step
+        # was attempted, even if the deploy or the settings check failed, so
+        # containment can report both verifications.
+        if: ${{ always() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure' || steps.deploy.outcome == 'cancelled') }}
+        timeout-minutes: 4
         env:
           STAGING_HOSTNAME: ${{ vars.STAGING_HOSTNAME }}
           ACCESS_TEAM_DOMAIN: ${{ vars.ACCESS_TEAM_DOMAIN }}
@@ -204,31 +231,36 @@ jobs:
             exit 1
           fi
 
-      # Automatic containment. Runs only when the deploy step succeeded and a
-      # later step (the two verifications above) failed. Logs exactly which
-      # verification failed and why, then disables the workers.dev URL and
-      # preview URLs of ninjatronics-v2 only (per-Worker endpoint).
-      # It does NOT run if the run is cancelled (or times out) after the
-      # deploy: verification and containment are then skipped, and the manual
-      # procedure in docs/deployment.md, "Cancelled or interrupted runs",
-      # applies.
+      # Automatic containment. Runs when the deploy step was attempted
+      # (success, failure, or cancelled) and either verification did not end
+      # in "success": it failed, timed out, was cancelled, or was skipped.
+      # Logs exactly which verification failed and why, then disables the
+      # workers.dev URL and preview URLs of ninjatronics-v2 only (per-Worker
+      # endpoint). A deployment whose two verifications both succeeded is
+      # never contained, even if Wrangler exited non-zero.
+      # Not covered (manual procedure in docs/deployment.md, "Cancelled or
+      # interrupted runs"): job timeout, forced cancellation, runner loss,
+      # and a failed containment call.
       - name: Contain exposure (disable workers.dev on ninjatronics-v2)
-        if: failure() && steps.deploy.outcome == 'success'
+        if: ${{ always() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure' || steps.deploy.outcome == 'cancelled') && (steps.settings.outcome != 'success' || steps.access.outcome != 'success') }}
+        timeout-minutes: 3
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           STAGING_HOSTNAME: ${{ vars.STAGING_HOSTNAME }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
           SETTINGS_OUTCOME: ${{ steps.settings.outcome }}
           ACCESS_OUTCOME: ${{ steps.access.outcome }}
         run: |
-          echo "::error::Deploy succeeded, but post-deploy verification failed. Containing."
+          echo "::error::Deployment state could not be verified as safe. Containing."
+          echo "Deploy to ninjatronics-v2: ${DEPLOY_OUTCOME:-not run}"
           echo "Verify Worker settings: ${SETTINGS_OUTCOME:-not run}"
           echo "Verify Cloudflare Access: ${ACCESS_OUTCOME:-not run}"
           if [ -s verification-failures.log ]; then
             echo "Verification failures:"
             cat verification-failures.log
           else
-            echo "No verification failure was recorded; a step failed before writing its log."
+            echo "No verification failure was recorded; a verification step failed, timed out, or was cancelled before writing its log."
           fi
           node --input-type=module <<'EOF'
           const { CLOUDFLARE_API_TOKEN: token, CLOUDFLARE_ACCOUNT_ID: account, EXPECTED_WORKER: worker } = process.env;
@@ -236,6 +268,8 @@ jobs:
             method: "POST",
             headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
             body: JSON.stringify({ enabled: false, previews_enabled: false }),
+            // Fail loudly ("CONTAINMENT FAILED") rather than hang until the step timeout.
+            signal: AbortSignal.timeout(30_000),
           }).catch((e) => ({ ok: false, status: `network error: ${e.message}`, json: async () => ({}) }));
           const body = await res.json().catch(() => ({}));
           if (!res.ok || !body.success || body.result?.enabled !== false) {
