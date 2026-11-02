@@ -13,7 +13,9 @@
     "check": "astro check",
     "import": "node scripts/obsidian/cli.ts",
     "import:check": "node scripts/obsidian/cli.ts --check",
-    "test": "node --test \"scripts/**/*.test.ts\""
+    "test": "node --test \"scripts/**/*.test.ts\"",
+    "preview:worker": "wrangler dev --ip 127.0.0.1 --port 8787",
+    "deploy:check": "wrangler deploy --dry-run"
   },
   "dependencies": {
     "@astrojs/mdx": "8.1.2",
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "0.9.12",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "wrangler": "4.153.0"
   }
 }

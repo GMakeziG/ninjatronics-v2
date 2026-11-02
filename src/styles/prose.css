@@ -267,12 +267,39 @@
   font-size: var(--step-meta);
   line-height: 1.65;
   tab-size: 2;
-  /* Shiki sets an inline background; keep the token surface consistent. */
-  background-color: var(--surface-card) !important;
+  background-color: var(--surface-card);
+  color: var(--brand-paper);
 }
 
 .prose pre code {
   font-size: inherit;
+}
+
+/* Syntax token colors. src/lib/shiki.ts turns Shiki's inline styles into
+   these classes (the CSP allows no inline styles). Contrast on the code
+   background is documented in shiki.ts; all pass WCAG AA. */
+.prose pre .tok-sage {
+  color: var(--brand-sage);
+}
+
+.prose pre .tok-teal {
+  color: var(--brand-teal);
+}
+
+.prose pre .tok-change {
+  color: var(--brand-vermilion);
+}
+
+.prose pre .tok-bold {
+  font-weight: 700;
+}
+
+.prose pre .tok-italic {
+  font-style: italic;
+}
+
+.prose pre .tok-noselect {
+  user-select: none;
 }
 
 /* Scrollable code and tables are keyboard-focusable. Their containers clip

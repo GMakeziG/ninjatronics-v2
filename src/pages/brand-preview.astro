@@ -6,12 +6,12 @@ import Logo from "../components/Logo.astro";
 import BranchLines from "../components/BranchLines.astro";
 
 const palette = [
-  { name: "Ink Black", hex: "#101214", role: "Primary background" },
-  { name: "Graphite", hex: "#1C2124", role: "Surfaces and panels" },
-  { name: "Warm Paper", hex: "#F0EDE6", role: "Text and light surfaces" },
-  { name: "Vermilion", hex: "#E15A3B", role: "Change, diffs, emphasis, main branch" },
-  { name: "Muted Sage", hex: "#A8B6AE", role: "Supporting text, secondary elements" },
-  { name: "Signal Teal", hex: "#2FD3C6", role: "Accent only; glow on logo prompt only" },
+  { key: "ink", name: "Ink Black", hex: "#101214", role: "Primary background" },
+  { key: "graphite", name: "Graphite", hex: "#1C2124", role: "Surfaces and panels" },
+  { key: "paper", name: "Warm Paper", hex: "#F0EDE6", role: "Text and light surfaces" },
+  { key: "vermilion", name: "Vermilion", hex: "#E15A3B", role: "Change, diffs, emphasis, main branch" },
+  { key: "sage", name: "Muted Sage", hex: "#A8B6AE", role: "Supporting text, secondary elements" },
+  { key: "teal", name: "Signal Teal", hex: "#2FD3C6", role: "Accent only; glow on logo prompt only" },
 ];
 
 // Rasterized PNGs, so the 4× zoom shows the real pixels a browser tab gets.
@@ -97,7 +97,7 @@ const favicons = [
         {
           palette.map((c) => (
             <li>
-              <span class="swatch" style={`background:${c.hex}`} />
+              <span class={`swatch swatch--${c.key}`} />
               <strong>{c.name}</strong>
               <code>{c.hex}</code>
               <span>{c.role}</span>
@@ -235,4 +235,12 @@ const favicons = [
     border-radius: var(--radius-sm);
     border: var(--border-width) solid var(--border-strong);
   }
+
+  /* Classes, not inline styles: the CSP allows no inline styles. */
+  .swatch--ink { background: var(--brand-ink); }
+  .swatch--graphite { background: var(--brand-graphite); }
+  .swatch--paper { background: var(--brand-paper); }
+  .swatch--vermilion { background: var(--brand-vermilion); }
+  .swatch--sage { background: var(--brand-sage); }
+  .swatch--teal { background: var(--brand-teal); }
 </style>

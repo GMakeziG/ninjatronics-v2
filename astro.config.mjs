@@ -16,7 +16,20 @@ export default defineConfig({
   site: "https://ninjatronics.io",
   output: "static",
   trailingSlash: "ignore",
-  build: { format: "file" },
+  build: {
+    format: "file",
+    // Strict Content-Security-Policy (public/_headers): ship CSS as files
+    // instead of inline <style> blocks, so style-src needs no 'unsafe-inline'.
+    inlineStylesheets: "never",
+  },
+  vite: {
+    build: {
+      // Same reason for scripts: never inline small scripts, so script-src
+      // can stay 'self' only. (This also stops inlining small assets as data:
+      // URIs; every asset is a cacheable file instead.)
+      assetsInlineLimit: 0,
+    },
+  },
   markdown: {
     shikiConfig: {
       theme: ninjatronicsTheme,

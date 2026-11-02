@@ -16,13 +16,16 @@ cutover is approved.
 | `npm run dev`     | Dev server at http://localhost:4321 (runs as a daemon in Astro 7; `npx astro dev stop` / `status` / `logs`). Shows drafts. |
 | `npm run check`   | `astro check`: type-checks `.astro`, `.ts`, and content |
 | `npm run build`   | Production build to `dist/` (drafts excluded)       |
-| `npm run preview` | Serve the built `dist/` locally                     |
+| `npm run preview` | Serve the built `dist/` locally (ignores `_headers`, `_redirects`, 404 handling) |
+| `npm run preview:worker` | Serve `dist/` with `wrangler dev` at http://127.0.0.1:8787: real headers, redirects, and 404s |
+| `npm run deploy:check` | `wrangler deploy --dry-run`: validate the Worker config; uploads nothing |
 | `npm run import:check` | Preview an Obsidian import (read-only)          |
 | `npm run import`  | Import approved vault notes into `src/content/blog/` (`-- --prune` to remove unpublished ones, with confirmation) |
 | `npm test`        | Importer test suite                                 |
 
 The vault path lives in `obsidian.local.json` (gitignored; see
 `obsidian.local.example.json`). No command here commits, pushes, or deploys.
+Deployment, staging, and rollback: see [docs/deployment.md](docs/deployment.md).
 
 Requires Node 22.23.4 or later (`.nvmrc`: 24).
 
@@ -41,7 +44,8 @@ src/config/                  site.ts (identity, nav, author), categories.ts, red
                              content-rules.ts (shared by the site schema and the importer)
 src/lib/                     posts.ts (draft rule + queries), shiki.ts (theme + code blocks),
                              reading-time.ts, format.ts
-src/integrations/            prune-unreferenced-assets (keeps draft images out of dist/)
+src/integrations/            prune-unreferenced-assets (keeps draft images out of dist/),
+                             validate-redirect-anchors (fails on redirects to missing #anchors)
 src/styles/                  tokens.css, global.css, prose.css (article body)
 src/layouts/                 BaseLayout (meta/SEO), ArticleLayout
 src/components/              Header, Footer, Logo, Button, PageHeader, SectionHeading, ChipList,
@@ -60,6 +64,8 @@ src/pages/                   index, blog/ (index, [slug], category/, tags/), rss
 | `/sitemap-index.xml` | All built pages except `/brand-preview` |
 | `/robots.txt` | `src/pages/robots.txt.ts` |
 | `/_redirects` | `src/config/redirects.ts` + each published article's `legacyUrls` (Cloudflare 301s) |
+| `/_headers` | `public/_headers` (security headers and caching; strict CSP) |
+| `/404.html` | `src/pages/404.astro` (served with HTTP 404 by the Worker) |
 
 ## Design rules (from docs/design/)
 
@@ -74,10 +80,10 @@ src/pages/                   index, blog/ (index, [slug], category/, tags/), rss
 ## Milestone status
 
 - [x] M1 Foundation and homepage
-- [x] M2 Blog engine (pending review)
-- [ ] M3 Content migration and pages
-- [ ] M4 Quality assurance
-- [ ] M5 Cloudflare preview deployment
+- [x] M2 Blog engine and Obsidian importer
+- [x] M3 Public pages (About, Projects, Now, Contact)
+- [ ] Content migration: five legacy notes and the WordPress "Error Budgets" post
+- [ ] Deployment: CP1 local readiness done; staging, then cutover (docs/deployment.md)
 
 ## Open items
 

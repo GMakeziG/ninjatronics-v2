@@ -1,0 +1,58 @@
+---
+// Branded "not found" page. Built as dist/404.html; the Worker serves it with
+// HTTP 404 for any path that isn't an asset or redirect
+// (wrangler.jsonc: assets.not_found_handling = "404-page").
+// noindex keeps it out of search results; the sitemap integration skips it.
+import BaseLayout from "../layouts/BaseLayout.astro";
+import PageHeader from "../components/PageHeader.astro";
+
+const links = [
+  { label: "Home", href: "/" },
+  { label: "Blog", href: "/blog" },
+  { label: "Projects", href: "/projects" },
+];
+---
+
+<BaseLayout title="Page not found" description="The page you're looking for doesn't exist or has moved." noindex>
+  <div class="container not-found">
+    <PageHeader id="not-found-title" eyebrow="404 / Not Found" title="Page not found" lede="The page you're looking for doesn't exist or has moved." />
+    <nav aria-label="Where to go next">
+      <ul class="not-found__links">
+        {
+          links.map((link) => (
+            <li>
+              <a href={link.href}>
+                {link.label}
+                <span aria-hidden="true">&nbsp;→</span>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </nav>
+  </div>
+</BaseLayout>
+
+<style>
+  .not-found {
+    display: grid;
+    gap: var(--space-6);
+    padding-top: var(--space-page-start);
+  }
+
+  .not-found__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-6);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .not-found__links a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-target);
+    font-size: var(--step-body-lg);
+  }
+</style>

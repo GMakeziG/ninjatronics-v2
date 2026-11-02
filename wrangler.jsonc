@@ -1,0 +1,26 @@
+// Cloudflare Worker for Ninjatronics v2: static assets only (no Worker
+// script, bindings, variables, or secrets). See docs/deployment.md.
+//
+// SAFETY: this file deliberately has NO "routes" and NO custom domains, so
+// no deploy can ever attach ninjatronics.io (or any other hostname). The
+// production domain is moved from the legacy Worker "ninjatronics" by hand,
+// in the dashboard, only during an approved cutover.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ninjatronics-v2",
+  // A fixed date, older than the runtime bundled with the pinned Wrangler
+  // (workerd 1.20261023). Change it deliberately, never automatically.
+  "compatibility_date": "2026-10-12",
+  "assets": {
+    "directory": "./dist",
+    // Unknown paths get dist/404.html with HTTP 404 (no soft 200s).
+    "not_found_handling": "404-page",
+    // /about serves about.html; /about/ redirects to /about. Matches the
+    // build's slash-less URLs (build.format: "file").
+    "html_handling": "auto-trailing-slash"
+  },
+  // Staging: <name>.<subdomain>.workers.dev and per-version preview URLs,
+  // both protected by Cloudflare Access (configured in the dashboard).
+  "workers_dev": true,
+  "preview_urls": true
+}

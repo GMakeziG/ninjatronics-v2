@@ -34,7 +34,12 @@ const { title, description = SITE.description, noindex = false, image, article, 
 
 const fullTitle = title ? `${title} · ${SITE.name}` : `${SITE.name}: ${SITE.tagline.join(" ")}`;
 // Canonical URLs never carry a trailing slash (see astro.config.mjs).
-const path = Astro.url.pathname.replace(/\.html$/, "").replace(/(.)\/+$/, "$1");
+// build.format "file" renders the homepage as /index.html, so "index" is
+// dropped too: the homepage's canonical URL is the site root.
+const path = Astro.url.pathname
+  .replace(/\.html$/, "")
+  .replace(/(^|\/)index$/, "$1")
+  .replace(/(.)\/+$/, "$1") || "/";
 const canonical = new URL(path, Astro.site ?? SITE.url).href;
 const imageUrl = image ? new URL(image.src, Astro.site ?? SITE.url).href : undefined;
 // Escape "<" so content can never close the <script> element early.

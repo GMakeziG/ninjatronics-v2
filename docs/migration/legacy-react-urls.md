@@ -56,9 +56,13 @@ serving ninjatronics.io, a client-side React SPA behind Cloudflare.
 | `/valley/git-forest/<repo>` (8) | `/projects#<repo>` | Each repository's project card or learning-list entry; the build verifies every target anchor exists | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
 | `/valley/floating-citadel`, `/floating-citadel` | `/about` | The district's successor is the About page | **Implemented (approved 2026-11-02)** |
 | `/valley/floating-citadel/<cert>` (3) | `/about#certifications` | About's certifications section; per-certificate pages aren't planned | **Implemented (approved 2026-11-02)** |
-| `/valley/hall-of-knowledge`, `/hall-of-knowledge` | `/blog` | The notes' new home is the blog | Recommended |
+| `/valley/hall-of-knowledge`, `/hall-of-knowledge` | `/blog` | The notes' new home is the blog | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
 | `/valley/hall-of-knowledge/<slug>` (5) | `/blog/<same-slug>`, 1:1 | Live public articles. See the mapping below. | Recommended; activates per article on publish |
-| `/valley` | `/` | A hub page with no single successor; the homepage is the new overview. Alternatives: `/blog`, or let it 404. | Recommended, your call |
+| `/valley` | `/` | A hub page with no single successor; the homepage is the new overview | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
+| `/sitemap.xml` | `/sitemap-index.xml` | The legacy sitemap location | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
+| WordPress `/about-me` | `/about` | The old WordPress About Me page | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
+| WordPress `/feed` | `/rss.xml` | The old WordPress RSS feed | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
+| WordPress `/benefits-of-aerobic-exercise-for-the-mind-and-body/` ("Error Budgets") | `/blog/<slug>` | Through the article's `legacyUrls` once it's published in v2 | Blocked on article migration |
 
 ### The five live notes: recommended mapping
 

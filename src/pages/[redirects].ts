@@ -30,6 +30,7 @@ async function knownPages(): Promise<Set<string>> {
     "/now",
     "/contact",
     "/rss.xml",
+    "/sitemap-index.xml",
     ...posts.map(postPath),
     ...CATEGORIES.filter((c) => used.has(c.slug)).map((c) => categoryPath(c.slug)),
     ...tagCounts(posts).map(({ tag }) => tagPath(tag)),

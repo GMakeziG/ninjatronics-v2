@@ -15,9 +15,9 @@ export interface RedirectRule {
 }
 
 export const STATIC_REDIRECTS: RedirectRule[] = [
-  // Legacy React site (see docs/migration/legacy-react-urls.md). /valley and
-  // /hall-of-knowledge are deliberately NOT redirected until their
-  // destinations are approved.
+  // Legacy React site (see docs/migration/legacy-react-urls.md). The five
+  // Hall of Knowledge notes are NOT listed here: each redirects through its
+  // article's `legacyUrls` once that article is published in v2.
   // Sitemap-listed paths (the legacy app rendered NotFound for these):
   { from: "/mission-brief", to: "/about", note: "Legacy React sitemap: Mission Brief → About (provisional)" },
   { from: "/git-forest", to: "/projects", note: "Legacy React sitemap: Git Forest → Projects (provisional)" },
@@ -50,4 +50,13 @@ export const STATIC_REDIRECTS: RedirectRule[] = [
     to: `/projects#${repo}`,
     note: "Legacy React repository page → Projects anchor",
   })),
+  // Approved 2026-11-02 (deployment readiness, CP1):
+  { from: "/valley", to: "/", note: "Legacy React world overview → homepage" },
+  { from: "/valley/hall-of-knowledge", to: "/blog", note: "Legacy React notes index → blog index" },
+  { from: "/hall-of-knowledge", to: "/blog", note: "Legacy React sitemap: Hall of Knowledge → blog index" },
+  { from: "/sitemap.xml", to: "/sitemap-index.xml", note: "Legacy sitemap location → Astro sitemap index" },
+  // Legacy WordPress site (www and the old apex). The "Error Budgets" post
+  // redirects through its article's `legacyUrls` once it's published in v2.
+  { from: "/about-me", to: "/about", note: "WordPress About Me page → About" },
+  { from: "/feed", to: "/rss.xml", note: "WordPress RSS feed → RSS" },
 ];
