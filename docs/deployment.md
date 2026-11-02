@@ -299,27 +299,120 @@ Against the Access-protected URL (authenticate first):
       Hall of Knowledge notes and the WordPress "Error Budgets" post).
 - [ ] Logo approved, `/brand-preview` removed, default social image added.
 - [ ] Staging smoke test passed on the commit being promoted.
-- [ ] Recorded: legacy Worker version ID, screenshot of its Domains & Routes,
-      DNS zone export (DNS → Records → Export).
-- [ ] Dashboard checked: how `ninjatronics.io` is attached (Custom Domain or
-      Route), Email Address Obfuscation off, no script-injecting features,
-      existing cache/redirect rules reviewed, Cloudflare Email Routing off.
+- [ ] Production baseline captured and reviewed (§5.1), on the cutover day
+      or no more than 24 hours before.
+- [ ] Activation timeout and rollback decision point written down and
+      approved for this cutover: the maximum time to wait in step 2 for the
+      v2 Custom Domain to become Active, and who decides to roll back. No
+      default applies; the cutover doesn't start without an approved value.
 
-**Cutover** (about 15 minutes, low-traffic window):
-1. Worker `ninjatronics` → Domains & Routes → remove `ninjatronics.io`.
-2. Worker `ninjatronics-v2` → Domains & Routes → add custom domain `ninjatronics.io`.
+**Cutover** (about 15 minutes, low-traffic window). The legacy Worker's
+attachment (Custom Domain or Route) is whatever §5.1 records. Don't assume
+either one, and stop if §5.1 doesn't record it. The planned v2 attachment
+is always a Custom Domain on `ninjatronics-v2`.
+0. Pre-check (read-only, no changes; do it before detaching anything):
+   - Compare the **current** Cloudflare DNS records (DNS → Records, live in
+     the dashboard) with the §5.1 baseline export: the apex and `www`
+     records, MX, SPF, DKIM, CAA, and the homelab CNAMEs. Also confirm that
+     the legacy Worker's active version and its Domains & Routes still match
+     §5.1.
+   - **If §5.1 records a Route:** look in the current DNS records for an
+     apex record that would block adding a Custom Domain to
+     `ninjatronics-v2`.
+   - **Stop here, before step 1,** if a conflicting apex record exists or
+     the current configuration differs from the baseline in any unexpected
+     way. Removing a conflicting record, or explaining a difference, is a
+     separate, approved step followed by a fresh pre-check.
+1. Detach `ninjatronics.io` from the legacy Worker `ninjatronics`:
+   - **If it's a Custom Domain:** Worker `ninjatronics` → Domains & Routes →
+     remove the `ninjatronics.io` Custom Domain. Cloudflare also removes the
+     DNS record it manages for that Custom Domain.
+   - **If it's a Route:** Worker `ninjatronics` → Domains & Routes → remove
+     the exact route pattern recorded in §5.1. The proxied apex DNS record
+     stays.
+2. Worker `ninjatronics-v2` → Domains & Routes → add Custom Domain
+   `ninjatronics.io`. Wait until it shows Active, with its certificate issued.
+   **Decision point:** if the Custom Domain can't be added, or isn't Active
+   within the approved activation timeout ("Before"), stop the cutover and
+   immediately start §6, "Back to the legacy site". Don't continue to step 3.
 3. `www`: Redirect Rule `www.ninjatronics.io/*` → `https://ninjatronics.io/${path}`
    (301, preserve query). Repoint the `www` record away from Hostinger to a
    proxied placeholder.
-4. SSL/TLS → Edge Certificates → Always Use HTTPS: on.
+4. SSL/TLS → Edge Certificates → Always Use HTTPS: on. Leave HSTS **off**
+   (see "After").
 5. Caching → Purge Everything.
 6. Verify from outside: pages, every legacy URL, `www`, `http://`, a 404,
-   headers; homelab subdomains still resolve; send a test email to the
-   public address.
+   headers; homelab subdomains still resolve.
+7. Mail: compare the MX, SPF, and DKIM records with the exact records
+   recorded in §5.1 (same names, selectors, and values), then send one test
+   message to the existing Proton mailbox and confirm it arrives. Any
+   difference means stop and restore the record from the zone export.
 
 **After:** submit `/sitemap-index.xml` in Search Console; watch 404s for a
-week; enable HSTS with a short `max-age` first. Keep the legacy Worker
-deployed for at least 30 days.
+week. Keep the legacy Worker deployed and unchanged for at least 30 days
+(the rollback window). Keep **HSTS off** for the whole rollback window: it
+can't be undone for visitors who have already received it. Enabling it
+afterwards, starting with a short `max-age`, is a separate, approved change.
+
+### 5.1 Production baseline (record before cutover)
+
+Everything here is read-only. Store the evidence (zone exports, screenshots,
+command output) **privately, outside this public repository**: it reveals
+infrastructure details. Record observed values only; don't fill in expected
+or guessed ones.
+
+**Legacy Worker `ninjatronics`**
+- [ ] Active version ID and its deploy date (Workers & Pages →
+      `ninjatronics` → Deployments).
+- [ ] Screenshot of Settings → Domains & Routes.
+- [ ] How `ninjatronics.io` is attached:
+  - **Custom Domain:** listed under the Worker's Custom Domains; the DNS
+    record is managed by Cloudflare for the Worker.
+  - **Route:** a zone route plus an ordinary proxied DNS record. Record the
+    exact route pattern and the DNS record.
+
+  Cutover steps 1–2 and the rollback depend on this.
+- [ ] Git connection (Settings → Build): whether Workers Builds is connected,
+      and if so, the repository and branch. If it is connected, nothing may
+      be pushed to that branch until the rollback window closes: a push
+      would replace the rollback target.
+- [ ] Any other hostnames or routes on the legacy Worker. They must survive
+      the cutover unchanged.
+
+**DNS**
+- [ ] Zone export (DNS → Records → Export), with a timestamp.
+- [ ] From the export, record the exact name, type, and value of:
+  - the apex and `www` records (`www` currently serves the Hostinger
+    WordPress origin);
+  - every MX record;
+  - the SPF TXT record;
+  - every DKIM record, with its selector, as it appears in the export;
+  - any other mail-provider verification records;
+  - CAA records;
+  - the homelab tunnel CNAMEs.
+
+**Zone settings** (screenshot or note each one)
+- [ ] SSL/TLS encryption mode, Always Use HTTPS, HSTS.
+- [ ] Scrape Shield → Email Address Obfuscation. It must be off: it injects
+      a script that the v2 CSP blocks.
+- [ ] Script injectors: Rocket Loader, Zaraz, and Web Analytics automatic
+      injection for this hostname. All must be off.
+- [ ] Every Redirect, Page, Transform, Cache, and Configuration rule. Note
+      any that match `ninjatronics.io` or `www`.
+- [ ] Email Routing (expected off: Proton handles mail).
+
+**External snapshot** (anonymous, from any terminal)
+- [ ] `curl -sI https://ninjatronics.io/`: status code and `etag`.
+- [ ] A content marker from the legacy home page shell, e.g. its
+      `<meta name="description">` and `<div id="root">`. Record exactly what
+      `curl -s https://ninjatronics.io/` returns.
+- [ ] The status code of every legacy URL in
+      `docs/migration/legacy-react-urls.md`, including the five
+      `/valley/hall-of-knowledge/<slug>` notes.
+- [ ] `curl -sI https://www.ninjatronics.io/`: status code and `location`.
+- [ ] `dig +short` for: A and AAAA (apex and `www`), NS, MX, TXT (apex, for
+      SPF), and each DKIM name taken from the export (`<selector>._domainkey…`
+      exactly as recorded), plus CAA.
 
 ---
 
@@ -333,10 +426,50 @@ deployed for at least 30 days.
 
 **Staging exposure:** see §3.3, Containment and recovery.
 
-**Back to the legacy site (under 5 minutes, no rebuild):**
-1. Worker `ninjatronics-v2` → Domains & Routes → remove `ninjatronics.io`.
-2. Worker `ninjatronics` → Domains & Routes → add `ninjatronics.io` back.
-3. Purge cache, then verify `/` serves the legacy site.
-The `www` redirect rule can stay: `www` → apex works either way.
+**Back to the legacy site** (no rebuild; usually minutes). This also applies
+when cutover step 2 failed after the legacy Worker was already detached.
+It requires the legacy Worker to still be deployed at the version recorded
+in §5.1, and it depends on the attachment method recorded there:
+1. Worker `ninjatronics-v2` → Domains & Routes → remove the `ninjatronics.io`
+   Custom Domain if it exists in any state (active, pending, or failed). If
+   it was never created, skip this step.
+   Then confirm it's actually gone: it no longer appears in `ninjatronics-v2`
+   → Domains & Routes, and the dashboard no longer lists a Cloudflare-managed
+   DNS record for it. **If removal fails or stays pending, stop and
+   escalate.** Don't restore the legacy attachment while the v2 attachment
+   may still exist: that would create a conflicting attachment.
+2. Restore the original attachment to the legacy Worker exactly as recorded
+   in §5.1:
+   - **If it was a Custom Domain:** Worker `ninjatronics` → Domains &
+     Routes → add Custom Domain `ninjatronics.io`. Cloudflare recreates the
+     DNS record and certificate. Wait until it shows Active.
+   - **If it was a Route:** re-add the exact route pattern recorded in §5.1
+     to `ninjatronics`. Confirm the apex DNS record matches the zone export,
+     and restore it from the export if it doesn't.
+3. Caching → Purge Everything.
+4. Verify from outside. Every check must pass; no single one is enough:
+   - `curl -sI https://ninjatronics.io/` returns the baseline status code;
+   - the home page HTML contains the legacy content markers recorded in §5.1;
+   - the five `/valley/hall-of-knowledge/<slug>` notes and the other
+     representative legacy URLs return their baseline status codes. Open at
+     least one note in a browser: the legacy app renders it client-side, so
+     its text isn't in the raw HTML;
+   - the `etag` matches the baseline *where it applies*. A match supports
+     the other checks; a mismatch alone doesn't mean failure, because ETags
+     can vary with response encoding or caching. Investigate it, and treat
+     it as a failure if the legacy Worker's active version also differs
+     from §5.1;
+   - MX, SPF, and DKIM still match the records recorded in §5.1.
+
+Notes:
+- The `www` redirect rule can stay: `www` → apex works either way.
+  Restoring the Hostinger `www` record from the zone export is optional, and
+  only if you want WordPress back.
+- Always Use HTTPS can stay on. Keep HSTS disabled throughout the rollback
+  window to avoid introducing additional browser-enforced HTTPS behavior
+  during recovery (§5, "After").
+- If §5.1 recorded a Git connection on the legacy Worker, nothing may be
+  pushed to that branch of `GMakeziG/ninjatronics` during the rollback
+  window.
 
 **Unpublishing one article:** see `docs/authoring.md` §4.
