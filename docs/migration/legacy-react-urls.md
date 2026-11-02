@@ -54,8 +54,8 @@ serving ninjatronics.io, a client-side React SPA behind Cloudflare.
 | `/brief` | `/about` | Real route for the same Mission Brief page | **Implemented (approved)** |
 | `/valley/git-forest` | `/projects` | Real route for the same Git Forest page | **Implemented (approved)** |
 | `/valley/git-forest/<repo>` (8) | `/projects` | v2 has no per-repository pages. Alternative: 301 each to its GitHub repository. | Recommended |
-| `/valley/floating-citadel`, `/floating-citadel` | `/about#certifications` | You want certifications on About. Requires an About section with that anchor (Milestone 3). | Recommended, after M3 |
-| `/valley/floating-citadel/<cert>` (3) | `/about#certifications` | Same section; per-certificate pages aren't planned | Recommended, after M3 |
+| `/valley/floating-citadel`, `/floating-citadel` | `/about` | The district's successor is the About page | **Implemented (approved 2026-11-02)** |
+| `/valley/floating-citadel/<cert>` (3) | `/about#certifications` | About's certifications section; per-certificate pages aren't planned | **Implemented (approved 2026-11-02)** |
 | `/valley/hall-of-knowledge`, `/hall-of-knowledge` | `/blog` | The notes' new home is the blog | Recommended |
 | `/valley/hall-of-knowledge/<slug>` (5) | `/blog/<same-slug>`, 1:1 | Live public articles. See the mapping below. | Recommended; activates per article on publish |
 | `/valley` | `/` | A hub page with no single successor; the homepage is the new overview. Alternatives: `/blog`, or let it 404. | Recommended, your call |

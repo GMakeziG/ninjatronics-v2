@@ -1,8 +1,318 @@
 ---
+// About (Milestone 3). Content lives in src/data/about.ts; this page only
+// lays it out. Successor of the legacy /brief ("Mission Brief") page.
 import BaseLayout from "../layouts/BaseLayout.astro";
-import PendingContent from "../components/PendingContent.astro";
+import PageHeader from "../components/PageHeader.astro";
+import SectionHeading from "../components/SectionHeading.astro";
+import CurrentRoles from "../components/about/CurrentRoles.astro";
+import CareerTimeline from "../components/about/CareerTimeline.astro";
+import { ABOUT } from "../data/about";
+import { AUTHOR, SITE } from "../config/site";
+import { getCategory } from "../config/categories";
+import { categoryPath, getPublishedPosts, usedCategories } from "../lib/posts";
+
+// Focus areas link only to category pages that exist in a production build.
+const published = usedCategories(await getPublishedPosts());
+const focusAreas = ABOUT.focusAreas.map((area) => ({
+  label: area.label,
+  links: area.categories
+    .filter((slug) => published.has(slug))
+    .map((slug) => ({ label: getCategory(slug).label, href: categoryPath(slug) })),
+}));
+
+const description =
+  "Gerso Robayo-Guillen: senior systems administrator and nonprofit IT leader focused on DevOps, automation, and platform engineering.";
+
+// Generalized employers are never named in structured data.
+const employers = ABOUT.currentRoles
+  .filter((role) => role.organization.inStructuredData && role.organization.url)
+  .map((role) => ({ "@type": "Organization", name: role.organization.name, url: role.organization.url }));
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "ProfilePage",
+  url: new URL("/about", SITE.url).href,
+  mainEntity: {
+    "@type": "Person",
+    name: AUTHOR.name,
+    jobTitle: ABOUT.currentRoles.map((role) => role.title),
+    worksFor: employers,
+    sameAs: [SITE.github, ABOUT.linkedin],
+  },
+};
 ---
 
-<BaseLayout title="About" description="The background and approach behind Ninjatronics.">
-  <PendingContent title="About" intro="The background and approach behind Ninjatronics." />
+<BaseLayout title="About" description={description} jsonLd={jsonLd}>
+  <article class="container about" aria-labelledby="about-title">
+    <PageHeader id="about-title" eyebrow="About / The Engineer" title={AUTHOR.name} lede={ABOUT.headline}>
+      <ul class="about__meta" aria-label="Location and profiles">
+        <li>{ABOUT.location}</li>
+        <li><a href={SITE.github}>GitHub</a></li>
+        <li><a href={ABOUT.linkedin}>LinkedIn</a></li>
+      </ul>
+      <p class="about__intro">{ABOUT.introduction}</p>
+    </PageHeader>
+
+    <section aria-labelledby="current-roles">
+      <SectionHeading id="current-roles" title="Current roles" />
+      <p class="about__section-intro">{ABOUT.currentRolesIntro}</p>
+      <CurrentRoles roles={ABOUT.currentRoles} />
+    </section>
+
+    <section aria-labelledby="focus">
+      <SectionHeading id="focus" title="Focus areas" />
+      <ul class="focus">
+        {
+          focusAreas.map((area) => (
+            <li class="focus__item">
+              <span class="focus__label">{area.label}</span>
+              {area.links.length > 0 && (
+                <span class="focus__links">
+                  {area.links.map((link) => (
+                    <a href={link.href}>{link.label}</a>
+                  ))}
+                </span>
+              )}
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <section aria-labelledby="career">
+      <SectionHeading id="career" title="Career" />
+      <CareerTimeline entries={ABOUT.career} earlier={ABOUT.earlierCareer} />
+    </section>
+
+    <section id="certifications" aria-labelledby="certifications-title">
+      <SectionHeading id="certifications-title" title="Certifications" />
+      <ul class="certs">
+        {
+          ABOUT.certifications.map((cert) => (
+            <li class="cert">
+              <p class="cert__meta">
+                <span>{cert.issuer}</span>
+                {cert.code && <span class="cert__code">{cert.code}</span>}
+              </p>
+              <h3 class="cert__name">{cert.name}</h3>
+              <a class="cert__verify" href={cert.verifyUrl}>
+                Verify{cert.verifyHost && ` on ${cert.verifyHost}`}
+                <span class="visually-hidden"> the {cert.name} credential</span>
+                <span aria-hidden="true">&nbsp;↗</span>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <section aria-labelledby="skills">
+      <SectionHeading id="skills" title="Skills" />
+      <dl class="skills">
+        {
+          ABOUT.skills.map((group) => (
+            <div class="skills__group">
+              <dt>{group.group}</dt>
+              <dd>
+                <ul class="chips">
+                  {group.items.map((item) => (
+                    <li class="chip">{item}</li>
+                  ))}
+                </ul>
+              </dd>
+            </div>
+          ))
+        }
+        <div class="skills__group skills__group--learning">
+          <dt>Actively learning</dt>
+          <dd>
+            <ul class="chips">
+              {ABOUT.learning.map((item) => <li class="chip chip--learning">{item}</li>)}
+            </ul>
+          </dd>
+        </div>
+      </dl>
+    </section>
+  </article>
 </BaseLayout>
+
+<style>
+  .about {
+    display: grid;
+    gap: var(--space-8);
+    padding-top: var(--space-page-start);
+  }
+
+  .about__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-meta);
+  }
+
+  .about__meta li {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-target);
+  }
+
+  .about__intro {
+    max-width: var(--measure);
+    font-size: var(--step-body-lg);
+  }
+
+  .about__section-intro {
+    max-width: var(--measure);
+    margin-bottom: var(--space-5);
+    color: var(--text-secondary);
+  }
+
+  .focus {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media (min-width: 48rem) {
+    .focus {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  .focus__item {
+    display: grid;
+    align-content: start;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    border-left: 2px solid var(--graphic-branch);
+  }
+
+  .focus__label {
+    font-family: var(--font-display);
+    font-weight: 700;
+  }
+
+  .focus__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    font-size: var(--step-small);
+  }
+
+  .certs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .cert {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-5);
+    background: var(--surface-card);
+    border: var(--border-width) solid var(--border-subtle);
+    border-radius: var(--radius-md);
+  }
+
+  .cert__meta {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .cert__code {
+    color: var(--accent-change);
+  }
+
+  .cert__name {
+    font-size: var(--step-body);
+  }
+
+  .cert__verify {
+    display: inline-flex;
+    align-items: center;
+    align-self: start;
+    min-height: var(--tap-target);
+    margin-top: auto;
+    font-size: var(--step-small);
+  }
+
+  .skills {
+    display: grid;
+    gap: var(--space-5);
+    margin: 0;
+  }
+
+  .skills__group {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  @media (min-width: 48rem) {
+    .skills__group {
+      grid-template-columns: 14rem 1fr;
+      align-items: baseline;
+      gap: var(--space-5);
+    }
+  }
+
+  .skills dt {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .skills dd {
+    margin: 0;
+  }
+
+  .skills__group--learning {
+    padding-top: var(--space-5);
+    border-top: var(--border-width) solid var(--border-subtle);
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0 var(--space-3);
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: var(--step-meta);
+  }
+
+  /* Quieter: dashed outline, secondary text. */
+  .chip--learning {
+    border-style: dashed;
+    color: var(--text-secondary);
+  }
+</style>

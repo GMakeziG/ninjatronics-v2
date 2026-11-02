@@ -59,8 +59,12 @@ export async function GET(_context: APIContext) {
     if (seen.has(from)) errors.push(`Duplicate redirect source ${from}: ${seen.get(from)} and ${rule.origin}`);
     seen.set(from, rule.origin);
     if (pages.has(from)) errors.push(`Redirect source ${from} would shadow an existing page (${rule.origin})`);
-    if (from === to) errors.push(`Redirect ${from} points to itself (${rule.origin})`);
-    if (!pages.has(to)) errors.push(`Redirect ${from} → ${to} targets a page that doesn't exist (${rule.origin})`);
+    // A target may carry a #fragment (e.g. /about#certifications); the page
+    // part must exist. Fragments are the page's own responsibility.
+    const [toPath, fragment] = to.split("#");
+    if (fragment !== undefined && !/^[a-z0-9-]+$/.test(fragment)) errors.push(`Redirect ${from} → ${to} has an invalid #fragment (${rule.origin})`);
+    if (from === toPath) errors.push(`Redirect ${from} points to itself (${rule.origin})`);
+    if (!pages.has(toPath)) errors.push(`Redirect ${from} → ${to} targets a page that doesn't exist (${rule.origin})`);
     // Match the path with and without a trailing slash; WordPress permalinks
     // usually end in "/", and old links may use either form.
     lines.push(`${from} ${to} 301`);

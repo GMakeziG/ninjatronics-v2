@@ -1,0 +1,207 @@
+---
+// Career history as a git-branch timeline: one Muted Sage line with a
+// commit dot per role. Current roles get a vermilion dot (Vermilion signals
+// change and the present). Earlier roles collapse into a <details> at the
+// end of the branch. Flat: no glow, gradient, or animation.
+import { formatYearMonth, type AboutContent } from "../../data/about";
+
+interface Props {
+  entries: AboutContent["career"];
+  earlier: AboutContent["earlierCareer"];
+}
+
+const { entries, earlier } = Astro.props;
+---
+
+<ol class="timeline">
+  {
+    entries.map((entry) => (
+      <li class:list={["timeline__item", { "timeline__item--current": !entry.end }]}>
+        <p class="timeline__dates">
+          <time datetime={entry.start}>{formatYearMonth(entry.start)}</time> –{" "}
+          {entry.end ? <time datetime={entry.end}>{formatYearMonth(entry.end)}</time> : "Present"}
+        </p>
+        <h3 class="timeline__title">{entry.title}</h3>
+        <p class="timeline__org">
+          {entry.organization}
+          {entry.location && <span> · {entry.location}</span>}
+        </p>
+        {entry.highlights.length > 0 && (
+          <ul class="timeline__highlights">
+            {entry.highlights.map((line) => (
+              <li>{line}</li>
+            ))}
+          </ul>
+        )}
+      </li>
+    ))
+  }
+  <li class="timeline__item timeline__item--earlier">
+    <details class="earlier">
+      <summary>
+        <span class="timeline__dates">1999–2013</span>
+        <span class="earlier__title">Earlier career</span>
+      </summary>
+      <p class="earlier__summary">{earlier.summary}</p>
+      <ul class="earlier__list">
+        {
+          earlier.roles.map((role) => (
+            <li>
+              <span>{role.organization}</span>
+              <span class="earlier__years">{role.years}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </details>
+  </li>
+</ol>
+
+<style>
+  .timeline {
+    --dot: 0.875rem;
+    --rail: calc(var(--dot) / 2);
+    position: relative;
+    display: grid;
+    gap: var(--space-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* The branch: one continuous line through every commit dot. */
+  .timeline::before {
+    content: "";
+    position: absolute;
+    top: 0.4rem;
+    bottom: 0.4rem;
+    left: calc(var(--rail) - 1px);
+    width: 2px;
+    background: var(--graphic-branch);
+    opacity: 0.6;
+  }
+
+  .timeline__item {
+    position: relative;
+    display: grid;
+    gap: var(--space-1);
+    padding-left: calc(var(--dot) + var(--space-5));
+  }
+
+  /* Commit dot */
+  .timeline__item::before {
+    content: "";
+    position: absolute;
+    top: 0.2rem;
+    left: 0;
+    width: var(--dot);
+    height: var(--dot);
+    background: var(--surface-page);
+    border: 2px solid var(--graphic-branch);
+    border-radius: 50%;
+  }
+
+  .timeline__item--current::before {
+    border-color: var(--accent-change);
+  }
+
+  .timeline__item--earlier::before {
+    border-style: dashed;
+  }
+
+  .timeline__dates {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-meta);
+  }
+
+  .timeline__item--current .timeline__dates {
+    color: var(--accent-change);
+  }
+
+  .timeline__title {
+    font-size: var(--step-h3);
+  }
+
+  .timeline__org {
+    font-weight: 500;
+  }
+
+  .timeline__org span {
+    color: var(--text-secondary);
+    font-weight: 400;
+  }
+
+  .timeline__highlights {
+    display: grid;
+    gap: var(--space-1);
+    margin: var(--space-1) 0 0;
+    padding-left: 1.1em;
+    color: var(--text-secondary);
+    font-size: var(--step-small);
+  }
+
+  .earlier summary {
+    display: grid;
+    gap: var(--space-1);
+    min-height: var(--tap-target);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .earlier summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .earlier__title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-display);
+    font-size: var(--step-h3);
+    font-weight: 700;
+  }
+
+  .earlier__title::after {
+    content: "+";
+    color: var(--accent-change);
+    font-family: var(--font-mono);
+    font-size: var(--step-body);
+  }
+
+  .earlier[open] .earlier__title::after {
+    content: "−";
+  }
+
+  .earlier__summary {
+    margin-top: var(--space-2);
+    max-width: var(--measure);
+    color: var(--text-secondary);
+    font-size: var(--step-small);
+  }
+
+  .earlier__list {
+    display: grid;
+    gap: var(--space-1);
+    max-width: 32rem;
+    margin: var(--space-3) 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--step-small);
+  }
+
+  .earlier__list li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding-block: var(--space-1);
+    border-bottom: var(--border-width) solid var(--border-subtle);
+  }
+
+  .earlier__years {
+    flex: none;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-meta);
+  }
+</style>

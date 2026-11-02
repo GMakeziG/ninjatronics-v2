@@ -1,0 +1,59 @@
+---
+// Page title block for top-level pages (About, Projects, Now, Contact):
+// an optional small label, the h1 with the vermilion section marker, an
+// optional lede, and a slot for page-specific metadata such as links.
+interface Props {
+  id: string;
+  title: string;
+  /** Small mono label above the title, e.g. "About / The Engineer". */
+  eyebrow?: string;
+  lede?: string;
+}
+
+const { id, title, eyebrow, lede } = Astro.props;
+---
+
+<header class="page-header">
+  {eyebrow && <p class="page-header__eyebrow">{eyebrow}</p>}
+  <h1 id={id} class="page-header__title">{title}</h1>
+  {lede && <p class="page-header__lede">{lede}</p>}
+  <slot />
+</header>
+
+<style>
+  .page-header {
+    display: grid;
+    gap: var(--space-4);
+    justify-items: start;
+  }
+
+  .page-header__eyebrow {
+    margin-bottom: calc(var(--space-2) * -1);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .page-header__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-size: var(--step-h1);
+  }
+
+  .page-header__title::before {
+    content: "";
+    flex: none;
+    width: 6px;
+    height: 0.85em;
+    background: var(--accent-change);
+  }
+
+  .page-header__lede {
+    max-width: var(--measure);
+    color: var(--text-secondary);
+    font-size: var(--step-body-lg);
+  }
+</style>

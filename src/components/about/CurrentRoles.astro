@@ -1,0 +1,113 @@
+---
+// Current roles as cards of equal visual weight: identical markup and
+// styling for every role, so none reads as primary.
+import { formatYearMonth, type CurrentRole } from "../../data/about";
+
+interface Props {
+  roles: CurrentRole[];
+}
+
+const { roles } = Astro.props;
+---
+
+<ul class="roles">
+  {
+    roles.map((role) => (
+      <li class="role">
+        <p class="role__status">
+          <span>Current</span>
+          <span>
+            Since <time datetime={role.start}>{formatYearMonth(role.start)}</time>
+          </span>
+        </p>
+        <h3 class="role__title">{role.title}</h3>
+        <p class="role__org">
+          {role.organization.url ? <a href={role.organization.url}>{role.organization.name}</a> : role.organization.name}
+          {role.organization.kind && <span class="role__kind">{role.organization.kind}</span>}
+        </p>
+        <p class="role__text">{role.responsibilities}</p>
+        {role.organization.description && <p class="role__mission">{role.organization.description}</p>}
+      </li>
+    ))
+  }
+</ul>
+
+<style>
+  /* One column, or three equal columns: never a 2 + 1 split that would set
+     one role apart from the others. */
+  .roles {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media (min-width: 64rem) {
+    .roles {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  .role {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-5);
+    background: var(--surface-card);
+    border: var(--border-width) solid var(--border-subtle);
+    border-top: 2px solid var(--accent-change);
+    border-radius: var(--radius-md);
+  }
+
+  .role__status {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-3);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .role__status span:first-child {
+    color: var(--accent-change);
+  }
+
+  .role__title {
+    font-size: var(--step-h3);
+  }
+
+  .role__org {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-3);
+    font-weight: 500;
+  }
+
+  .role__kind {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-micro);
+    font-weight: 400;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .role__text {
+    font-size: var(--step-small);
+  }
+
+  /* Follows the role description directly (not pinned to the card bottom). */
+  .role__mission {
+    margin-top: var(--space-2);
+    padding-top: var(--space-3);
+    border-top: var(--border-width) solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-size: var(--step-meta);
+  }
+</style>
