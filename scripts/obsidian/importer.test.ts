@@ -415,6 +415,173 @@ test("prune: reports stale imports, deletes only with confirmation, never touche
   }
 });
 
+// ------------------------------------------------------- imported drafts (importDraft)
+
+const draftNote = (fields: Record<string, string>, body?: string) => note({ draft: "true", importDraft: "true", ...fields }, body);
+const frontmatterOf = (out: string) => out.match(/^---\n([\s\S]*?)\n---/)![1];
+
+test("imports a note as a draft only with publish: true, draft: true, and importDraft: true", async () => {
+  const env = await setup({
+    "articles/linux/Staged.md": draftNote({ slug: "staged", legacyUrls: '["/old/staged"]' }, "## Section\n\nDraft body.\n"),
+    "articles/linux/Plain draft.md": note({ slug: "plain-draft", draft: "true" }),
+    "articles/linux/Opt out.md": note({ slug: "opt-out", draft: "true", importDraft: "false" }),
+    "articles/linux/Empty flag.md": note({ slug: "empty-flag", draft: "true", importDraft: "" }),
+  });
+  try {
+    const plan = await planImport(env);
+    assert.deepEqual(plan.errors, []);
+    assert.deepEqual(plan.articles.map((a) => [a.slug, a.status, a.draft]), [["staged", "create", true]]);
+    assert.deepEqual(plan.skippedDrafts.sort(), ["articles/linux/Empty flag.md", "articles/linux/Opt out.md", "articles/linux/Plain draft.md"]);
+    await applyPlan(plan, { prune: false, pruneConfirmed: false });
+    assert.deepEqual(await readdir(env.contentDir), ["staged"]);
+
+    const out = await readFile(join(env.contentDir, "staged", "index.md"), "utf8");
+    const fm = frontmatterOf(out);
+    assert.match(fm, /^importedFrom: "articles\/linux\/Staged\.md"$/m);
+    assert.match(fm, /^draft: true$/m);
+    assert.doesNotMatch(fm, /^draft: false$/m);
+    assert.match(fm, /^legacyUrls: \["\/old\/staged"\]$/m);
+    assert.doesNotMatch(fm, /^(publish|importDraft|slug):/m, "vault-only properties never reach the site");
+    assert.match(out, /Draft body\./);
+
+    const again = await planImport(env);
+    assert.deepEqual(again.articles.map((a) => [a.status, a.draft, a.previousDraft]), [["unchanged", true, true]]);
+  } finally {
+    await env.cleanup();
+  }
+});
+
+test("rejects contradictory or invalid importDraft metadata", async () => {
+  const cases: Array<[string, string, RegExp]> = [
+    ["importDraft with draft: false", note({ importDraft: "true" }), /importDraft can only be true together with draft: true/],
+    ["importDraft not boolean", note({ draft: "true", importDraft: "yes" }), /importDraft must be true or false/],
+    ["importDraft quoted string", note({ draft: "true", importDraft: '"true"' }), /importDraft must be true or false/],
+    ["importDraft without draft", note({ draft: "__omit__", importDraft: "true" }), /draft is required/],
+  ];
+  for (const [name, content, pattern] of cases) {
+    const env = await setup({ "articles/linux/N.md": content });
+    try {
+      const plan = await planImport(env);
+      assert.ok(plan.errors.some((e) => pattern.test(e)), `${name}: expected ${pattern}, got ${plan.errors.join(" | ") || "(none)"}`);
+      assert.equal(plan.articles.length, 0, `${name}: nothing planned`);
+      await assert.rejects(applyPlan(plan, { prune: false, pruneConfirmed: false }), /Refusing to write/);
+      assert.deepEqual(await readdir(env.contentDir), [], `${name}: nothing written`);
+    } finally {
+      await env.cleanup();
+    }
+  }
+});
+
+test("importDraft never bypasses the publish gate", async () => {
+  const env = await setup({
+    "articles/linux/Unmarked.md": draftNote({ slug: "unmarked", publish: "__omit__" }),
+    "articles/linux/Not yet.md": draftNote({ slug: "not-yet", publish: "false" }),
+  });
+  try {
+    const plan = await planImport(env);
+    assert.deepEqual(plan.errors, []);
+    assert.equal(plan.articles.length, 0);
+    assert.equal(plan.unmarkedCount, 2);
+  } finally {
+    await env.cleanup();
+  }
+});
+
+test("published → draft and draft → published transitions rewrite only the draft flag and are reported", async () => {
+  const env = await setup({ "articles/linux/A.md": note({ slug: "a" }, "Same body.\n") });
+  try {
+    await applyPlan(await planImport(env), { prune: false, pruneConfirmed: false });
+    const published = await readFile(join(env.contentDir, "a", "index.md"), "utf8");
+    assert.match(frontmatterOf(published), /^draft: false$/m);
+
+    // Published → imported draft: stays imported (not stale), becomes draft: true.
+    await writeFile(join(env.vaultDir, "articles/linux/A.md"), draftNote({ slug: "a" }, "Same body.\n"));
+    const toDraft = await planImport(env);
+    assert.deepEqual(toDraft.errors, []);
+    assert.deepEqual(toDraft.stale, []);
+    assert.deepEqual(toDraft.articles.map((a) => [a.status, a.previousDraft, a.draft, a.changed]), [["update", false, true, ["index.md"]]]);
+    await applyPlan(toDraft, { prune: false, pruneConfirmed: false });
+    const drafted = await readFile(join(env.contentDir, "a", "index.md"), "utf8");
+    assert.equal(drafted, published.replace(/^draft: false$/m, "draft: true"), "only the draft flag changes");
+
+    // Imported draft → published: requires draft: false, and importDraft gone.
+    await writeFile(join(env.vaultDir, "articles/linux/A.md"), note({ slug: "a" }, "Same body.\n"));
+    const toPublished = await planImport(env);
+    assert.deepEqual(toPublished.articles.map((a) => [a.status, a.previousDraft, a.draft]), [["update", true, false]]);
+    await applyPlan(toPublished, { prune: false, pruneConfirmed: false });
+    assert.equal(await readFile(join(env.contentDir, "a", "index.md"), "utf8"), published, "back to the original published output");
+  } finally {
+    await env.cleanup();
+  }
+});
+
+test("a plain draft still makes an imported draft stale (prune behavior unchanged)", async () => {
+  const env = await setup({ "articles/linux/A.md": draftNote({ slug: "a" }) });
+  try {
+    await applyPlan(await planImport(env), { prune: false, pruneConfirmed: false });
+    await writeFile(join(env.vaultDir, "articles/linux/A.md"), note({ slug: "a", draft: "true" }));
+    const plan = await planImport(env);
+    assert.deepEqual(plan.articles, []);
+    assert.deepEqual(plan.stale, [{ slug: "a", source: "articles/linux/A.md" }]);
+  } finally {
+    await env.cleanup();
+  }
+});
+
+test("links: published articles can't link to imported drafts; drafts can link to drafts and published", async () => {
+  const env = await setup({
+    "articles/linux/Pub.md": note({ slug: "pub" }, "See [[Staged One]].\n"),
+    "articles/linux/Pub md link.md": note({ slug: "pub-md" }, "See [x](Staged%20One.md).\n"),
+    "articles/linux/Staged One.md": draftNote({ slug: "staged-one" }, "See [[Target]] and [[Staged Two]].\n"),
+    "articles/linux/Staged Two.md": draftNote({ slug: "staged-two" }),
+    "articles/linux/Target.md": note({ slug: "target" }),
+  });
+  try {
+    const plan = await planImport(env);
+    assert.ok(plan.errors.some((e) => /Pub\.md: .*\[\[Staged One\]\] is imported only as a draft/.test(e)), plan.errors.join("\n"));
+    assert.ok(plan.errors.some((e) => /Pub md link\.md: .*imported only as a draft/.test(e)), plan.errors.join("\n"));
+    assert.ok(!plan.errors.some((e) => e.includes("Staged One.md:")), "draft → draft/published links are allowed");
+    const staged = plan.articles.find((a) => a.slug === "staged-one")!.files.get("index.md")!.toString();
+    assert.match(staged, /\(\/blog\/target\)/);
+    assert.match(staged, /\(\/blog\/staged-two\)/);
+  } finally {
+    await env.cleanup();
+  }
+});
+
+test("imported drafts keep slug-collision, ownership, and rename protections", async () => {
+  const manual = "---\ntitle: \"Manual\"\ndescription: \"x\"\npubDate: 2025-01-01\ncategory: linux\ndraft: true\n---\n\nHand-written.\n";
+  const env = await setup(
+    {
+      "articles/linux/Pub.md": note({ slug: "same" }),
+      "articles/linux/Staged.md": draftNote({ slug: "same" }),
+      "articles/linux/Clash.md": draftNote({ slug: "manual-article" }),
+    },
+    { "manual-article/index.md": manual },
+  );
+  try {
+    const plan = await planImport(env);
+    errorsMatch(plan, /slug "same" is used by both/);
+    errorsMatch(plan, /Clash\.md: slug "manual-article" belongs to a manually maintained article/);
+    await assert.rejects(applyPlan(plan, { prune: false, pruneConfirmed: false }), /Refusing to write/);
+    assert.equal(await readFile(join(env.contentDir, "manual-article", "index.md"), "utf8"), manual);
+  } finally {
+    await env.cleanup();
+  }
+
+  const moved = await setup({ "articles/linux/Old.md": draftNote({ slug: "d" }) });
+  try {
+    await applyPlan(await planImport(moved), { prune: false, pruneConfirmed: false });
+    await rm(join(moved.vaultDir, "articles/linux/Old.md"));
+    await writeFile(join(moved.vaultDir, "articles/linux/New.md"), draftNote({ slug: "d" }));
+    const plan = await planImport(moved);
+    assert.deepEqual(plan.errors, []);
+    assert.deepEqual(plan.articles.map((a) => [a.status, a.renamedFrom, a.draft]), [["update", "articles/linux/Old.md", true]]);
+  } finally {
+    await moved.cleanup();
+  }
+});
+
 // ------------------------------------------------------- frontmatter parser
 
 test("parses the YAML Obsidian's Properties editor writes", () => {

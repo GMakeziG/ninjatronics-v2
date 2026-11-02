@@ -1,5 +1,6 @@
 // npm run import:check            preview (read-only)
-// npm run import                  import approved articles
+// npm run import                  import approved articles (published, plus notes
+//                                 marked importDraft: true, written as drafts)
 // npm run import -- --prune       also delete imported articles whose note is no longer publishable
 //                                 (asks you to type "prune"; --yes skips the prompt)
 // Options: --vault <path>
@@ -55,14 +56,20 @@ function printPlan(plan: ImportPlan, mode: string) {
   out(`  target:  src/content/blog/\n`);
 
   const byStatus = (s: string) => plan.articles.filter((a) => a.status === s);
-  for (const a of byStatus("create")) out(`  + create     ${a.slug.padEnd(40)} ← ${a.source} (${a.files.size} file${a.files.size === 1 ? "" : "s"})`);
+  // Visibility label: imported drafts never reach production; a change in
+  // either direction is called out so it can't slip through review.
+  const visibility = (a: ImportPlan["articles"][number]) => {
+    if (a.previousDraft !== undefined && a.previousDraft !== a.draft) return a.draft ? " [published → draft]" : " [draft → PUBLISHED]";
+    return a.draft ? " [draft]" : "";
+  };
+  for (const a of byStatus("create")) out(`  + create     ${a.slug.padEnd(40)} ← ${a.source} (${a.files.size} file${a.files.size === 1 ? "" : "s"})${visibility(a)}`);
   for (const a of byStatus("update")) {
     const parts = [a.changed.length && `changed: ${a.changed.join(", ")}`, a.removed.length && `removed: ${a.removed.join(", ")}`, a.renamedFrom && `renamed from ${a.renamedFrom}`].filter(Boolean);
-    out(`  ~ update     ${a.slug.padEnd(40)} ← ${a.source} (${parts.join("; ")})`);
+    out(`  ~ update     ${a.slug.padEnd(40)} ← ${a.source} (${parts.join("; ")})${visibility(a)}`);
   }
   const unchanged = byStatus("unchanged");
-  if (unchanged.length) out(`  = unchanged  ${unchanged.map((a) => a.slug).join(", ")}`);
-  for (const d of plan.skippedDrafts) out(`  · draft      ${d} (draft: true, not imported)`);
+  if (unchanged.length) out(`  = unchanged  ${unchanged.map((a) => `${a.slug}${a.draft ? " [draft]" : ""}`).join(", ")}`);
+  for (const d of plan.skippedDrafts) out(`  · draft      ${d} (draft: true, not imported; add importDraft: true to import it as a draft)`);
   if (plan.unmarkedCount) out(`  · ignored    ${plan.unmarkedCount} note(s) in articles/ without publish: true`);
   for (const s of plan.stale) out(`  ! stale      ${s.slug.padEnd(40)} ← ${s.source} (no longer publishable; kept unless you run --prune)`);
   if (!plan.articles.length && !plan.skippedDrafts.length && !plan.stale.length) out("  (nothing to import)");
