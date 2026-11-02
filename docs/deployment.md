@@ -7,8 +7,8 @@ afterwards as the rollback target.
 
 ```
 GitHub GMakeziG/ninjatronics-v2 ──(Workers Builds)──▶ Worker "ninjatronics-v2"
-   main                          → production version   (workers.dev today; ninjatronics.io after cutover)
-   any other branch              → preview version URL   (staging, behind Cloudflare Access)
+   main                          → production version   (workers.dev today, behind Cloudflare Access; ninjatronics.io after cutover)
+   any other branch              → not built yet         (pull-request previews are deferred; see §3)
 ```
 
 Nothing in this repository can attach a hostname: `wrangler.jsonc` has no
@@ -111,13 +111,21 @@ or email.
    repository → `ninjatronics-v2`.
    - Build command: `npm run build`
    - Deploy command: `npx wrangler deploy`
-   - Non-production branch deploy command: `npx wrangler versions upload`
+   - Non-production branch builds: **off** (pull-request previews are
+     deferred). When separately approved, use the deploy command
+     `npx wrangler versions upload`, never `npx wrangler deploy`, so a
+     branch can't replace the production version.
    - Build variable: `NODE_VERSION=24`
 3. **Cloudflare Access:** Worker → Settings → Domains & Routes → enable
-   Cloudflare Access for the **workers.dev** route and for **Preview URLs**.
-   Policy: allow only the owner's email (one-time PIN or GitHub login).
-4. **No staging DNS record.** Staging lives only on `workers.dev` and preview
-   URLs.
+   Cloudflare Access for the **workers.dev** route. Policy: allow only the
+   owner's email (one-time PIN). Verify the Access application's exact
+   hostname and its email-only Allow policy before trusting it.
+4. **No staging DNS record.** Staging lives only on `workers.dev`.
+5. **Preview URLs are disabled** (`"preview_urls": false` in `wrangler.jsonc`).
+   Every deploy applies that value, so they stay off even if toggled in the
+   dashboard. Enabling pull-request previews later is a separate, approved
+   change: set the value to `true` in a pull request, protect Preview URLs
+   with Access and verify it, then turn on non-production branch builds.
 
 ### Staging smoke test
 
