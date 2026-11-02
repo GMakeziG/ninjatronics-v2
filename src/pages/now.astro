@@ -1,8 +1,149 @@
 ---
+// Now (Milestone 3C). Content lives in src/data/now.ts; this page only lays
+// it out. Items link to Projects and articles instead of repeating them.
 import BaseLayout from "../layouts/BaseLayout.astro";
-import PendingContent from "../components/PendingContent.astro";
+import PageHeader from "../components/PageHeader.astro";
+import SectionHeading from "../components/SectionHeading.astro";
+import { NOW, STALE_AFTER_DAYS, daysSinceUpdate, type NowItem } from "../data/now";
+import { PROJECTS } from "../data/projects";
+import { SITE } from "../config/site";
+import { formatDate } from "../lib/format";
+import { getPublishedPosts, postPath } from "../lib/posts";
+
+// Non-blocking reminder: never fails the build.
+const age = daysSinceUpdate();
+if (age > STALE_AFTER_DAYS) {
+  console.warn(`[now] src/data/now.ts was last updated ${age} days ago (${NOW.updated}); consider refreshing the Now page.`);
+}
+
+// Article links must point at published articles; anything else fails the build.
+const posts = await getPublishedPosts();
+const projectNames = new Map(PROJECTS.featured.map((p) => [p.id, p.name]));
+
+function resolveLinks(item: NowItem) {
+  return item.links.map((link) => {
+    if (link.kind === "project") {
+      return { label: "Project", context: projectNames.get(link.id) ?? link.id, href: `/projects#${link.id}` };
+    }
+    const post = posts.find((p) => p.id === link.slug);
+    if (!post) throw new Error(`src/data/now.ts: "${item.title}" links to "${link.slug}", which is not a published article`);
+    return { label: "Article", context: post.data.title, href: postPath(post) };
+  });
+}
+
+const sections = [
+  { id: "building", title: "Building", items: NOW.building },
+  { id: "learning", title: "Learning", items: NOW.learning },
+  { id: "experimenting", title: "Experimenting", items: NOW.experimenting },
+].map((s) => ({ ...s, items: s.items.map((item) => ({ ...item, resolved: resolveLinks(item) })) }));
+
+const updatedDate = new Date(`${NOW.updated}T00:00:00Z`);
+const description = "What Gerso Robayo-Guillen is building, learning, and experimenting with right now.";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  name: "Now",
+  url: new URL("/now", SITE.url).href,
+  description,
+  dateModified: NOW.updated,
+};
 ---
 
-<BaseLayout title="Now" description="A regularly updated snapshot of what I'm currently building, learning, and experimenting with.">
-  <PendingContent title="Now" intro="A regularly updated snapshot of what I'm currently building, learning, and experimenting with." />
+<BaseLayout title="Now" description={description} jsonLd={jsonLd}>
+  <div class="container now">
+    <PageHeader id="now-title" eyebrow="Now / Current Focus" title="Now" lede={NOW.intro}>
+      <p class="now__updated">
+        Last updated <time datetime={NOW.updated}>{formatDate(updatedDate)}</time>
+      </p>
+    </PageHeader>
+
+    {
+      sections.map((section) => (
+        <section aria-labelledby={section.id}>
+          <SectionHeading id={section.id} title={section.title} />
+          <ul class="now__items">
+            {section.items.map((item) => (
+              <li class="now__item">
+                <h3 class="now__title">{item.title}</h3>
+                <p class="now__note">{item.note}</p>
+                {item.resolved.length > 0 && (
+                  <p class="now__links">
+                    {item.resolved.map((link) => (
+                      <a href={link.href}>
+                        {link.label}
+                        <span class="visually-hidden">: {link.context}</span>
+                        <span aria-hidden="true">&nbsp;→</span>
+                      </a>
+                    ))}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))
+    }
+  </div>
 </BaseLayout>
+
+<style>
+  /* Single column at reading width on every screen size, aligned with the
+     other pages' left edge. */
+  .now {
+    display: grid;
+    gap: var(--space-7);
+    padding-top: var(--space-page-start);
+  }
+
+  .now > :global(*) {
+    max-width: var(--measure);
+  }
+
+  .now__updated {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--step-meta);
+  }
+
+  .now__updated time {
+    color: var(--text-primary);
+  }
+
+  .now__items {
+    display: grid;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* Same treatment as the About page's focus areas: a thin sage rule. */
+  .now__item {
+    display: grid;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-4);
+    border-left: 2px solid var(--graphic-branch);
+  }
+
+  .now__title {
+    font-size: var(--step-body-lg);
+  }
+
+  .now__note {
+    color: var(--text-secondary);
+  }
+
+  .now__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-5);
+    font-size: var(--step-small);
+  }
+
+  .now__links a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-target);
+  }
+</style>
