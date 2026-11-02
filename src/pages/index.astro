@@ -67,6 +67,7 @@ const websiteJsonLd = {
               excerpt={post.data.description}
               date={post.data.pubDate}
               readingMinutes={readingMinutes(post.body)}
+              cover={post.data.cover}
               draft={post.data.draft}
             />
           ))}

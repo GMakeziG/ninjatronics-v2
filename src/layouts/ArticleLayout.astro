@@ -146,6 +146,21 @@ const jsonLd = {
     </footer>
   </article>
   <CopyCode />
+  <script>
+    // Tables wider than the reading column scroll horizontally. Make only those
+    // focusable so keyboard users can scroll them (Chrome and Firefox already
+    // do this for scroll containers; Safari doesn't).
+    let frame = 0;
+    function markScrollableTables() {
+      frame = 0;
+      for (const table of document.querySelectorAll<HTMLTableElement>(".prose table")) {
+        if (table.scrollWidth > table.clientWidth + 1) table.tabIndex = 0;
+        else table.removeAttribute("tabindex");
+      }
+    }
+    markScrollableTables();
+    window.addEventListener("resize", () => (frame ||= requestAnimationFrame(markScrollableTables)), { passive: true });
+  </script>
 </BaseLayout>
 
 <style>
@@ -277,6 +292,10 @@ const jsonLd = {
       align-self: start;
       max-height: calc(100dvh - var(--space-7));
       overflow-y: auto;
+      /* Long TOCs scroll on their own without dragging the page along. */
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-strong) transparent;
     }
   }
 

@@ -1,9 +1,12 @@
 ---
 // "On this page" navigation built from the article's h2/h3 headings at build
-// time. No JavaScript. Rendered twice by ArticleLayout: a sticky sidebar on
-// wide screens and a collapsible <details> on narrow ones. CSS hides one with
-// display:none, which also removes it from the accessibility tree, so
-// assistive tech only ever sees one.
+// time. Rendered twice by ArticleLayout: a sticky sidebar on wide screens and
+// a collapsible <details> on narrow ones. CSS hides one with display:none,
+// which also removes it from the accessibility tree, so assistive tech only
+// ever sees one.
+//
+// The sidebar marks the section being read with aria-current="location" (a
+// small progressive enhancement; without JavaScript it's a plain link list).
 import type { MarkdownHeading } from "astro";
 
 interface Props {
@@ -42,6 +45,62 @@ const items = headings.filter((h) => h.depth === 2 || h.depth === 3);
     </details>
   )
 }
+
+<script>
+  const nav = document.querySelector<HTMLElement>(".toc--sidebar");
+  // The sticky <aside> around the list scrolls when the TOC is taller than the viewport.
+  const scroller = nav?.parentElement;
+
+  if (nav && scroller) {
+    const entries = [...nav.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')]
+      .map((link) => ({ link, heading: document.getElementById(decodeURIComponent(link.hash.slice(1))) }))
+      .filter((e): e is { link: HTMLAnchorElement; heading: HTMLElement } => e.heading !== null);
+    let current: HTMLAnchorElement | undefined;
+    let frame = 0;
+
+    /** The section being read: the last heading above a line 30% down the viewport. */
+    function active(): HTMLAnchorElement | undefined {
+      const line = window.innerHeight * 0.3;
+      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      if (atBottom) {
+        // Short final sections never reach the line; prefer the one just
+        // navigated to, else the last heading on screen.
+        const visible = entries.filter((e) => e.heading.getBoundingClientRect().top < window.innerHeight);
+        return (visible.find((e) => e.link.hash === location.hash) ?? visible.at(-1))?.link;
+      }
+      const passed = entries.filter((e) => e.heading.getBoundingClientRect().top <= line);
+      // Right after following a TOC link, its heading sits at the top of the
+      // viewport; keep it marked even if a subsection starts just below it.
+      const target = passed.find((e) => e.link.hash === location.hash && e.heading.getBoundingClientRect().top >= 0);
+      return (target ?? passed.at(-1))?.link;
+    }
+
+    function update() {
+      frame = 0;
+      if (nav!.offsetParent === null) return; // sidebar hidden on narrow screens
+      const next = active();
+      if (next === current) return;
+      current?.removeAttribute("aria-current");
+      current = next;
+      if (!current) return;
+      current.setAttribute("aria-current", "location");
+      // Keep the active link visible inside a long, scrollable TOC (instant, no animation).
+      const box = scroller!.getBoundingClientRect();
+      const item = current.getBoundingClientRect();
+      if (item.top < box.top || item.bottom > box.bottom) {
+        scroller!.scrollTop += item.top - box.top - box.height / 3;
+      }
+    }
+
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule, { passive: true });
+    window.addEventListener("hashchange", schedule);
+    update();
+  }
+</script>
 
 <style>
   .toc {
@@ -83,7 +142,18 @@ const items = headings.filter((h) => h.depth === 2 || h.depth === 3);
 
   .toc__item a:hover {
     color: var(--text-primary);
+    border-left-color: var(--border-strong);
+  }
+
+  /* Section currently being read (sidebar only; set by the script above). */
+  .toc__item a[aria-current="location"] {
+    color: var(--text-primary);
     border-left-color: var(--accent-change);
+  }
+
+  /* Inset ring: the sidebar scrolls, which would clip an outset outline. */
+  .toc__item a:focus-visible {
+    outline-offset: -2px;
   }
 
   .toc--inline {

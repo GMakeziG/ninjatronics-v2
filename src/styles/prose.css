@@ -18,6 +18,12 @@
   scroll-margin-top: var(--space-5);
 }
 
+/* The article header already provides the space above the body, so the
+   first block (usually an h2 with a large top margin) doesn't add more. */
+.prose > :first-child {
+  margin-top: 0;
+}
+
 /* h2 carries the vermilion section marker from the reference article. */
 .prose h2 {
   display: flex;
@@ -111,9 +117,13 @@
   overflow-x: auto;
   border-collapse: collapse;
   font-size: var(--step-small);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
+/* Wide tables scroll instead of squeezing every column to one word per line. */
 .prose :where(th, td) {
+  min-width: 10rem;
   padding: var(--space-2) var(--space-4);
   border-bottom: var(--border-width) solid var(--border-subtle);
   text-align: left;
@@ -252,6 +262,8 @@
   margin: 0;
   padding: var(--space-4);
   overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
   font-size: var(--step-meta);
   line-height: 1.65;
   tab-size: 2;
@@ -261,4 +273,10 @@
 
 .prose pre code {
   font-size: inherit;
+}
+
+/* Scrollable code and tables are keyboard-focusable. Their containers clip
+   overflow, so the focus ring is drawn inside instead of outside. */
+.prose :where(pre, table):focus-visible {
+  outline-offset: -2px;
 }

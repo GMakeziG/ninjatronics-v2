@@ -1,5 +1,9 @@
 ---
 // Article summary card (reference: "Latest Articles" row on the homepage).
+// The media slot only renders when the article has a cover image; cards
+// without one start directly with their text, so there's no empty panel.
+import type { ImageMetadata } from "astro";
+import { Image } from "astro:assets";
 import { formatDate, isoDate } from "../lib/format";
 
 interface Props {
@@ -9,21 +13,22 @@ interface Props {
   href: string;
   date: Date;
   readingMinutes: number;
+  /** Optional cover. Decorative here (alt=""): the title link already names the card. */
+  cover?: ImageMetadata;
   /** Drafts only render in `astro dev`; label them so they're never mistaken for published work. */
   draft?: boolean;
   /** Heading level inside the surrounding section. */
   headingLevel?: 2 | 3;
 }
 
-const { title, category, excerpt, href, date, readingMinutes, draft = false, headingLevel = 3 } = Astro.props;
+const { title, category, excerpt, href, date, readingMinutes, cover, draft = false, headingLevel = 3 } = Astro.props;
 const Heading = `h${headingLevel}` as "h2" | "h3";
 ---
 
 <article class:list={["card", { "card--draft": draft }]}>
-  <div class="card__media" aria-hidden="true">
-    {draft && <span class="card__flag">Draft</span>}
-  </div>
+  {cover && <Image class="card__media" src={cover} alt="" widths={[400, 800]} sizes="(min-width: 48rem) 400px, 100vw" />}
   <div class="card__body">
+    {draft && <p class="card__flag">Draft</p>}
     <p class="card__category">{category}</p>
     <Heading class="card__title"><a href={href}>{title}</a></Heading>
     <p class="card__excerpt">{excerpt}</p>
@@ -65,19 +70,16 @@ const Heading = `h${headingLevel}` as "h2" | "h3";
     border-color: var(--accent-change);
   }
 
-  /* Flat media slot: a quiet graphite panel with a single main-branch line. */
   .card__media {
-    position: relative;
-    aspect-ratio: 16 / 7;
-    background:
-      linear-gradient(var(--graphic-main), var(--graphic-main)) left 50% / 100% 2px no-repeat,
-      var(--surface-panel);
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-bottom: var(--border-width) solid var(--border-subtle);
   }
 
   .card__flag {
-    position: absolute;
-    top: var(--space-3);
-    left: var(--space-3);
+    align-self: start;
     padding: 2px var(--space-2);
     border: var(--border-width) dashed var(--accent-change);
     border-radius: var(--radius-sm);
@@ -94,7 +96,7 @@ const Heading = `h${headingLevel}` as "h2" | "h3";
     flex: 1;
     flex-direction: column;
     gap: var(--space-2);
-    padding: var(--space-4) var(--space-5) var(--space-5);
+    padding: var(--space-5);
   }
 
   .card__category {
