@@ -19,17 +19,16 @@ The solution uses **Obsidian, Syncthing, NixOS, Ubuntu Server, and Astro**.
 The goal was straightforward:
 
 - Write and organize articles in Obsidian.
-    
+
 - Keep Markdown files synchronized between my workstation and server.
-    
+
 - Run synchronization on a headless Linux server.
-    
+
 - Keep private notes separate from public website content.
-    
+
 - Review and explicitly approve articles before publication.
-    
+
 - Maintain the infrastructure configuration through Git.
-    
 
 This walkthrough documents the implementation, including a service startup issue encountered during configuration.
 
@@ -49,7 +48,7 @@ For this article, the systems are identified as `workstation` and `content-serve
 
 The publishing workflow is:
 
-```
+```text
 NixOS Workstation
   |
   | Obsidian
@@ -86,13 +85,13 @@ The Ubuntu server is headless, so there is no need to install the Obsidian deskt
 
 Instead, I created the vault directory directly on the server.
 
-```
+```bash
 mkdir -p ~/Obsidian/technical-blog/{articles/{automation,linux,security,gitops,infrastructure-as-code,platform-engineering},inbox,private,templates}
 ```
 
 The resulting directory structure was:
 
-```
+```text
 technical-blog/
 ├── articles/
 │   ├── automation/
@@ -109,7 +108,7 @@ technical-blog/
 
 The article template was copied from the website project's authoring documentation:
 
-```
+```bash
 cp ~/src/technical-blog/docs/obsidian/article-template.md \
    ~/Obsidian/technical-blog/templates/article.md
 ```
@@ -124,14 +123,14 @@ The server was running Ubuntu 24.04 LTS.
 
 I installed Syncthing using the distribution's package manager:
 
-```
+```bash
 sudo apt update
 sudo apt install -y syncthing
 ```
 
 Verify the installation:
 
-```
+```bash
 syncthing --version
 ```
 
@@ -139,25 +138,25 @@ syncthing --version
 
 Syncthing runs under a regular Linux account rather than root.
 
-```
+```bash
 systemctl --user enable --now syncthing.service
 ```
 
 To keep the service running after SSH sessions end, enable lingering for the account:
 
-```
+```bash
 sudo loginctl enable-linger "$USER"
 ```
 
 Verify the service:
 
-```
+```bash
 systemctl --user status syncthing.service --no-pager
 ```
 
 The expected result is:
 
-```
+```text
 Active: active (running)
 ```
 
@@ -167,19 +166,19 @@ Running Syncthing as a user service provides a persistent background process wit
 
 Syncthing provides a web-based management interface, normally listening on:
 
-```
+```text
 127.0.0.1:8384
 ```
 
 Rather than exposing the management interface to the network, I accessed it through an SSH tunnel from my workstation.
 
-```
+```bash
 ssh -N -L 8385:127.0.0.1:8384 content-server
 ```
 
 Then I opened:
 
-```
+```text
 http://127.0.0.1:8385
 ```
 
@@ -226,7 +225,7 @@ It helps recover from synchronization mistakes, although it does not replace a p
 
 I configured Syncthing to ignore machine-specific Obsidian workspace state and temporary files.
 
-```
+```text
 .obsidian/workspace.json
 .obsidian/workspaces.json
 .obsidian/cache/
@@ -247,7 +246,7 @@ I chose the NixOS system service instead of a Home Manager user service so synch
 
 In my workstation's existing NixOS `services` block, I added the following Syncthing configuration:
 
-```
+```nix
 syncthing = {
   enable = true;
   user = "myuser";
@@ -270,7 +269,7 @@ The workstation already used interface-specific firewall rules, so I followed th
 
 For synchronization over a Tailscale interface:
 
-```
+```nix
 networking.firewall.interfaces."tailscale0".allowedTCPPorts = [
   22
   22000
@@ -299,7 +298,7 @@ The examples assume a flake-based NixOS configuration, but the same option place
 
 Before applying the changes, I formatted and reviewed the configuration.
 
-```
+```bash
 nixfmt hosts/workstation/configuration.nix
 git diff --check
 git diff -- hosts/workstation/configuration.nix
@@ -307,19 +306,19 @@ git diff -- hosts/workstation/configuration.nix
 
 Then I performed a dry build:
 
-```
+```bash
 sudo nixos-rebuild dry-build --flake .#workstation
 ```
 
 After validation, I applied the configuration:
 
-```
+```bash
 sudo nixos-rebuild switch --flake .#workstation
 ```
 
 Finally:
 
-```
+```bash
 systemctl status syncthing.service --no-pager
 ```
 
@@ -331,7 +330,7 @@ The newly enabled Syncthing service repeatedly failed to start.
 
 Systemd reported:
 
-```
+```text
 Active: failed (Result: start-limit-hit)
 ```
 
@@ -343,13 +342,13 @@ However, `start-limit-hit` only indicates that systemd stopped restarting the se
 
 I retrieved the journal:
 
-```
+```bash
 sudo journalctl -u syncthing.service -b -n 100 --no-pager -l
 ```
 
 The logs revealed:
 
-```
+```text
 ERR Failed to start API/GUI
 error="listen tcp 127.0.0.1:8384: bind: address already in use"
 ```
@@ -364,13 +363,13 @@ When Syncthing started on the NixOS workstation, it attempted to bind its own ma
 
 To check for an existing SSH tunnel:
 
-```
+```bash
 ps aux | grep '[s]sh.*8384'
 ```
 
 To inspect the listening socket:
 
-```
+```bash
 sudo ss -ltnp '( sport = :8384 )'
 ```
 
@@ -378,14 +377,14 @@ The solution was to close the SSH tunnel occupying the port.
 
 After the port became available, I cleared systemd's failed state and restarted Syncthing.
 
-```
+```bash
 sudo systemctl reset-failed syncthing.service
 sudo systemctl restart syncthing.service
 ```
 
 Then:
 
-```
+```bash
 systemctl status syncthing.service --no-pager
 ```
 
@@ -408,17 +407,16 @@ Syncthing identifies devices using unique cryptographic device IDs.
 On the NixOS workstation:
 
 1. Open the Syncthing dashboard.
-    
+
 2. Select **Add Remote Device**.
-    
+
 3. Retrieve the Ubuntu server's Device ID from **Actions → Show ID**.
-    
+
 4. Enter the Device ID.
-    
+
 5. Assign a recognizable device name.
-    
+
 6. Save.
-    
 
 On the Ubuntu server, accept the workstation as a remote device.
 
@@ -431,25 +429,24 @@ Device IDs are not passwords, but there is no reason to publish real device iden
 On the Ubuntu server:
 
 1. Open the shared folder configuration.
-    
+
 2. Select the **Sharing** tab.
-    
+
 3. Enable sharing with the workstation.
-    
+
 4. Save.
-    
 
 On the workstation, accept the incoming folder invitation.
 
 Use the same Folder ID:
 
-```
+```text
 technical-blog
 ```
 
 Set the local destination:
 
-```
+```text
 /home/<user>/Obsidian/technical-blog
 ```
 
@@ -473,7 +470,7 @@ I did not select **Create new vault**.
 
 I then opened:
 
-```
+```text
 /home/<user>/Obsidian/technical-blog
 ```
 
@@ -484,17 +481,16 @@ Obsidian recognized the directory as a vault and displayed the synchronized arti
 In Obsidian:
 
 1. Open **Settings**.
-    
+
 2. Enable the **Templates** core plugin.
-    
+
 3. Open the Templates settings.
-    
+
 4. Set the template folder to `templates`.
-    
 
 When creating a new article, I can now use the Command Palette:
 
-```
+```text
 Templates: Insert template
 ```
 
@@ -508,7 +504,7 @@ After the initial synchronization, I wanted to confirm that changes made in Obsi
 
 On the workstation, I created a test note under `inbox`:
 
-```
+```markdown
 # Syncthing Test
 
 Created in Obsidian on the workstation.
@@ -518,7 +514,7 @@ Testing synchronization back to the server.
 
 Then, on the Ubuntu server:
 
-```
+```bash
 cat ~/Obsidian/technical-blog/inbox/sync-test.md
 ```
 
@@ -540,7 +536,7 @@ The Astro publishing process therefore requires explicit content approval.
 
 An example article might contain:
 
-```
+```yaml
 ---
 title: "Example Technical Article"
 description: "An example of the controlled publishing workflow."
@@ -557,7 +553,7 @@ An unfinished article remains private to the authoring workflow.
 
 When the article is reviewed and ready for publication, its metadata can be updated to:
 
-```
+```yaml
 publish: true
 draft: false
 ```
@@ -568,14 +564,14 @@ The importer is designed to require both values before considering an article el
 
 On the Ubuntu server, navigate to your Astro project directory (replace `technical-blog` with your actual project name):
 
-```
+```bash
 cd ~/src/technical-blog
 npm run import:check
 ```
 
 This checks the eligible content without writing changes.
 Actual result of your draft-protection test:
-```
+```text
 Obsidian import: check only (nothing written)
   · ignored    1 note(s) in articles/ without publish: true
   (nothing to import)
@@ -585,13 +581,13 @@ Check passed.
 
 When approved:
 
-```
+```bash
 npm run import
 ```
 
 Then validate the website:
 
-```
+```bash
 npm run check
 npm test
 npm run build
@@ -599,7 +595,7 @@ npm run build
 
 The generated changes should be reviewed through Git before committing or deploying.
 
-```
+```bash
 git status
 git diff
 ```
@@ -637,17 +633,16 @@ The publishing importer must explicitly exclude private material, and generated 
 Before publishing infrastructure walkthroughs, remove or replace:
 
 - Real hostnames, usernames, and internal domains.
-    
+
 - Private IP addresses and sensitive network topology.
-    
+
 - Device identifiers, API keys, tokens, and credentials.
-    
+
 - Organization-specific configurations.
-    
+
 - Screenshots containing identifying details.
-    
+
 - Logs containing personal or operational information.
-    
 
 Generic examples should be clearly identified as examples.
 

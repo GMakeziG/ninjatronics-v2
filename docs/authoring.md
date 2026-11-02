@@ -97,6 +97,7 @@ Any other property is an error, so typos like `pubdate` are caught.
 | `%% private %%`, `<!-- private -->` | **Removed.** Safe for notes to self. |
 | `^block-id` | Removed |
 | Fenced code with a language | Highlighted code with a copy button. `$ ` prompts are stripped on copy. |
+| Fenced code without a language | Plain, unhighlighted text. **Always name the language** after the opening fence: `bash` for commands, `nix`, `yaml`, `json`, `powershell`, `markdown`, and `text` for output, directory trees, and paths. Don't pick a language just to get colors. |
 
 **Rejected with an explanation** (the import stops; nothing is written):
 links to notes that aren't published (or don't exist, or are outside
