@@ -57,7 +57,7 @@ serving ninjatronics.io, a client-side React SPA behind Cloudflare.
 | `/valley/floating-citadel`, `/floating-citadel` | `/about` | The district's successor is the About page | **Implemented (approved 2026-11-02)** |
 | `/valley/floating-citadel/<cert>` (3) | `/about#certifications` | About's certifications section; per-certificate pages aren't planned | **Implemented (approved 2026-11-02)** |
 | `/valley/hall-of-knowledge`, `/hall-of-knowledge` | `/blog` | The notes' new home is the blog | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
-| `/valley/hall-of-knowledge/<slug>` (5) | `/blog/<same-slug>`, 1:1 | Live public articles. See the mapping below. | **Approved. 3 of 5 imported as drafts (PR 2); each redirect activates when that article is published** |
+| `/valley/hall-of-knowledge/<slug>` (5) | `/blog/<same-slug>`, 1:1 | Live public articles. See the mapping below. | **Approved. 5 of 5 imported as drafts (PR 2: 3, PR 3: 2); each redirect activates when that article is published** |
 | `/valley` | `/` | A hub page with no single successor; the homepage is the new overview | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
 | `/sitemap.xml` | `/sitemap-index.xml` | The legacy sitemap location | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
 | WordPress `/about-me` | `/about` | The old WordPress About Me page | **Implemented in v2 (approved 2026-11-02); not yet deployed or verified in production** |
@@ -78,8 +78,8 @@ publish automatically.
 | `/valley/hall-of-knowledge/systemd-service-troubleshooting` | `/blog/systemd-service-troubleshooting` | linux → `linux` | Imported as draft (PR 2); not yet published |
 | `/valley/hall-of-knowledge/powershell-automation-principles` | `/blog/powershell-automation-principles` | automation → `automation` | Imported as draft (PR 2); not yet published |
 | `/valley/hall-of-knowledge/active-directory-troubleshooting-workflow` | `/blog/active-directory-troubleshooting-workflow` | security → `security` | Imported as draft (PR 2); not yet published |
-| `/valley/hall-of-knowledge/gitops-homelab-lessons` | `/blog/gitops-homelab-lessons` | kubernetes → `gitops` *(proposed; no kubernetes category in v2)* | Not migrated; category decision pending |
-| `/valley/hall-of-knowledge/documentation-before-change-philosophy` | `/blog/documentation-before-change-philosophy` | career → **decision needed** *(no career category; closest is `platform-engineering`)* | Not migrated; category decision pending |
+| `/valley/hall-of-knowledge/gitops-homelab-lessons` | `/blog/gitops-homelab-lessons` | kubernetes → `gitops` | Imported as draft (PR 3); not yet published |
+| `/valley/hall-of-knowledge/documentation-before-change-philosophy` | `/blog/documentation-before-change-philosophy` | career → `platform-engineering` | Imported as draft (PR 3); not yet published |
 | `/valley/hall-of-knowledge` (index) | `/blog` | The blog index is the direct successor of the notes index, not a placeholder. | Implemented (static redirect) |
 
 **How it works without auto-publishing:** each migrated note (Milestone 3)
