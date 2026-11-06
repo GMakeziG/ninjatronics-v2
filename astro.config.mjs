@@ -39,11 +39,9 @@ export default defineConfig({
   },
   integrations: [
     mdx(),
-    sitemap({
-      // Internal review pages never go in the sitemap. Drafts are excluded
-      // upstream: production builds don't generate draft pages at all.
-      filter: (page) => !page.includes("/brand-preview"),
-    }),
+    // Drafts are excluded upstream: production builds don't generate draft
+    // pages at all.
+    sitemap(),
     // Keeps draft images out of dist/ (see the integration for details).
     pruneUnreferencedAssets(),
     // Fails the build if a redirect points at a #fragment the page lacks.

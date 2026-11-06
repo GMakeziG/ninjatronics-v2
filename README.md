@@ -54,7 +54,7 @@ src/components/              Header, Footer, Logo, Button, PageHeader, SectionHe
                              Callout, CopyCode, BranchLines; about/ and projects/ page parts
 src/pages/                   index, blog/ (index, [slug], category/, tags/), rss.xml, robots.txt,
                              [redirects] (→ dist/_redirects), about, projects, now, contact
-                             (content in src/data/), brand-preview (temporary)
+                             (content in src/data/)
 ```
 
 ## Generated files
@@ -62,7 +62,7 @@ src/pages/                   index, blog/ (index, [slug], category/, tags/), rss
 | Output | Source |
 |---|---|
 | `/rss.xml` | Published articles |
-| `/sitemap-index.xml` | All built pages except `/brand-preview` |
+| `/sitemap-index.xml` | All built, indexable pages |
 | `/robots.txt` | `src/pages/robots.txt.ts` |
 | `/_redirects` | `src/config/redirects.ts` + each published article's `legacyUrls` (Cloudflare 301s) |
 | `/_headers` | `public/_headers` (security headers and caching; strict CSP) |
@@ -88,9 +88,6 @@ src/pages/                   index, blog/ (index, [slug], category/, tags/), rss
 
 ## Open items
 
-- Logo: SVG reconstruction of reference 4 is a proposal pending approval.
-- Delete `src/pages/brand-preview.astro` before launch.
-- Default `og:image` deferred until the logo is approved.
 - Legacy React URL decisions: see docs/migration/legacy-react-urls.md.
 - Missing assets: WordPress uploads.
 - Deferred: heading anchor links (would need a custom plugin for Astro 7's

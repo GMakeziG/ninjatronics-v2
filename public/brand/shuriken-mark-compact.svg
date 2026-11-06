@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-128 -128 256 256" width="256" height="256" role="img" aria-label="Ninjatronics">
   <!-- PROPOSED compact variant for the site header (rendered ~40px).
        Same geometry as shuriken-mark.svg; the fine dry-brush trails are removed
-       because they don't hold at small sizes. The prompt glow is kept but softened. -->
+       because they don't hold at small sizes. The prompt glow is kept but softened.
+       Blade edges: a #4f565c outline so the light tips hold on Warm Paper. -->
   <defs>
     <linearGradient id="bladeLight" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#f4f5f6"/>
@@ -28,6 +29,7 @@
     <g id="blade">
       <path d="M0,-122 Q-17,-62 -31.11,-31.11 L0,0 Z" fill="url(#bladeLight)"/>
       <path d="M0,-122 Q17,-62 31.11,-31.11 L0,0 Z" fill="url(#bladeDark)"/>
+      <path d="M0,-122 Q-17,-62 -31.11,-31.11 L0,0 L31.11,-31.11 Q17,-62 0,-122 Z" fill="none" stroke="#4f565c" stroke-width="3.5" stroke-linejoin="round"/>
     </g>
   </defs>
 

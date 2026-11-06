@@ -1,18 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-128 -128 256 256" width="16" height="16">
-  <!-- PROPOSED 16px favicon: simplified star silhouette per
-       ninjatronics-logo-reference5.png. The prompt is reduced to a single
-       teal chevron because ">_" can't resolve at 16px. No glow. -->
-  <circle r="84" fill="none" stroke="#e15a3b" stroke-width="30"/>
+  <!-- PROPOSED 16px favicon per ninjatronics-logo-reference5.png: dark rounded
+       Ink Black tile, simplified star silhouette and enso. The prompt is
+       reduced to a single teal chevron because ">_" can't resolve at 16px.
+       No glow. -->
   <defs>
     <g id="b">
       <path d="M0,-128 Q-16,-60 -36,-36 L0,0 Z" fill="#c9ced2"/>
       <path d="M0,-128 Q16,-60 36,-36 L0,0 Z" fill="#8a9196"/>
     </g>
   </defs>
-  <use href="#b" transform="rotate(45)"/>
-  <use href="#b" transform="rotate(135)"/>
-  <use href="#b" transform="rotate(225)"/>
-  <use href="#b" transform="rotate(315)"/>
-  <circle r="48" fill="#0c0e10"/>
-  <path d="M-18,-20 L6,0 L-18,20" fill="none" stroke="#2fd3c6" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="-128" y="-128" width="256" height="256" rx="56" fill="#101214"/>
+  <g transform="scale(0.88)">
+    <circle r="84" fill="none" stroke="#e15a3b" stroke-width="32"/>
+    <use href="#b" transform="rotate(45)"/>
+    <use href="#b" transform="rotate(135)"/>
+    <use href="#b" transform="rotate(225)"/>
+    <use href="#b" transform="rotate(315)"/>
+    <circle r="50" fill="#0c0e10"/>
+    <path d="M-18,-20 L6,0 L-18,20" fill="none" stroke="#2fd3c6" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>

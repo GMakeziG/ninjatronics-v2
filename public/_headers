@@ -42,6 +42,9 @@
 /apple-touch-icon.png
   ! Cache-Control
   Cache-Control: public, max-age=86400
+/og/*
+  ! Cache-Control
+  Cache-Control: public, max-age=86400
 
 # Feeds and sitemaps: an hour.
 /rss.xml

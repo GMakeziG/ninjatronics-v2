@@ -14,6 +14,18 @@ export const SITE = {
   language: "en-US",
 } as const;
 
+/**
+ * Default social preview image (Open Graph / Twitter), used by every page
+ * that doesn't pass its own (an article's `cover` overrides it).
+ * Spec: 1200×630 PNG, < 300 KB, sRGB, no transparency.
+ */
+export const SOCIAL_IMAGE = {
+  src: "/og/default.png",
+  width: 1200,
+  height: 630,
+  alt: "Ninjatronics: the shuriken and terminal-prompt mark with the NINJATRONICS.IO wordmark and the tagline “Engineering in the shadows. Building in the open.”",
+} as const;
+
 /** Article byline and structured-data author (approved for Milestone 2). */
 export const AUTHOR = {
   name: "Gerso Robayo-Guillen",

@@ -6,7 +6,7 @@ import "../styles/global.css";
 
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
-import { SITE } from "../config/site";
+import { SITE, SOCIAL_IMAGE } from "../config/site";
 
 export interface ArticleMeta {
   publishedTime: Date;
@@ -36,7 +36,11 @@ interface Props {
   jsonLd?: Record<string, unknown> | Record<string, unknown>[];
 }
 
-const { title, description = SITE.description, noindex = false, canonical: emitCanonical = true, image, article, jsonLd } = Astro.props;
+const { title, description = SITE.description, noindex = false, canonical: emitCanonical = true, image: pageImage, article, jsonLd } = Astro.props;
+// Pages without their own image (everything except articles with a cover)
+// share the default social image, whose size is known up front.
+const image = pageImage ?? SOCIAL_IMAGE;
+const imageSize = pageImage ? undefined : SOCIAL_IMAGE;
 
 const fullTitle = title ? `${title} · ${SITE.name}` : `${SITE.name}: ${SITE.tagline.join(" ")}`;
 // Canonical URLs never carry a trailing slash (see astro.config.mjs).
@@ -79,6 +83,8 @@ const ldJson = jsonLd ? JSON.stringify(jsonLd).replace(/</g, "\\u003c") : undefi
     <meta property="og:type" content={article ? "article" : "website"} />
     {imageUrl && <meta property="og:image" content={imageUrl} />}
     {image && <meta property="og:image:alt" content={image.alt} />}
+    {imageSize && <meta property="og:image:width" content={String(imageSize.width)} />}
+    {imageSize && <meta property="og:image:height" content={String(imageSize.height)} />}
     {
       article && (
         <>
@@ -94,7 +100,7 @@ const ldJson = jsonLd ? JSON.stringify(jsonLd).replace(/</g, "\\u003c") : undefi
     <meta name="twitter:title" content={title ?? fullTitle} />
     <meta name="twitter:description" content={description} />
     {imageUrl && <meta name="twitter:image" content={imageUrl} />}
-    <!-- Default social image is deferred until the logo is approved. -->
+    {image && <meta name="twitter:image:alt" content={image.alt} />}
 
     {ldJson && <script type="application/ld+json" set:html={ldJson} />}
   </head>
