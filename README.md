@@ -22,6 +22,7 @@ cutover is approved.
 | `npm run import:check` | Preview an Obsidian import (read-only)          |
 | `npm run import`  | Import approved vault notes into `src/content/blog/` (`-- --prune` to remove unpublished ones, with confirmation) |
 | `npm test`        | Importer test suite                                 |
+| `npm run verify:dist` | Static release checks on `dist/` (canonicals, CSP-safe markup, links and anchors, redirects, sitemap, RSS, no drafts). Run after `build` |
 
 The vault path lives in `obsidian.local.json` (gitignored; see
 `obsidian.local.example.json`). No command here commits, pushes, or deploys.

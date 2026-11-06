@@ -22,6 +22,12 @@ interface Props {
   description?: string;
   /** Keep a page out of search indexes (internal previews, drafts). */
   noindex?: boolean;
+  /**
+   * Emit <link rel="canonical"> and og:url. Turn off for pages served at
+   * arbitrary URLs (the 404 page is returned for every unknown path, so a
+   * canonical pointing at /404 would be wrong).
+   */
+  canonical?: boolean;
   /** Absolute or site-relative URL of the social preview image. */
   image?: { src: string; alt: string };
   /** Present on article pages: switches og:type to "article". */
@@ -30,7 +36,7 @@ interface Props {
   jsonLd?: Record<string, unknown> | Record<string, unknown>[];
 }
 
-const { title, description = SITE.description, noindex = false, image, article, jsonLd } = Astro.props;
+const { title, description = SITE.description, noindex = false, canonical: emitCanonical = true, image, article, jsonLd } = Astro.props;
 
 const fullTitle = title ? `${title} · ${SITE.name}` : `${SITE.name}: ${SITE.tagline.join(" ")}`;
 // Canonical URLs never carry a trailing slash (see astro.config.mjs).
@@ -53,7 +59,7 @@ const ldJson = jsonLd ? JSON.stringify(jsonLd).replace(/</g, "\\u003c") : undefi
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
-    <link rel="canonical" href={canonical} />
+    {emitCanonical && <link rel="canonical" href={canonical} />}
     {noindex && <meta name="robots" content="noindex, nofollow" />}
     <meta name="theme-color" content="#101214" />
     <meta name="color-scheme" content="dark" />
@@ -69,7 +75,7 @@ const ldJson = jsonLd ? JSON.stringify(jsonLd).replace(/</g, "\\u003c") : undefi
     <meta property="og:locale" content="en_US" />
     <meta property="og:title" content={title ?? fullTitle} />
     <meta property="og:description" content={description} />
-    <meta property="og:url" content={canonical} />
+    {emitCanonical && <meta property="og:url" content={canonical} />}
     <meta property="og:type" content={article ? "article" : "website"} />
     {imageUrl && <meta property="og:image" content={imageUrl} />}
     {image && <meta property="og:image:alt" content={image.alt} />}

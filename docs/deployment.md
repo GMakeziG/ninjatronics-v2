@@ -93,7 +93,7 @@ third-party origins. Keep it that way:
 ## 2. Local checks before any push
 
 ```bash
-npm run check && npm test && npm run build
+npm run check && npm test && npm run build && npm run verify:dist
 npm run preview:worker      # wrangler dev at http://127.0.0.1:8787 — real _headers, _redirects, 404s
 npm run deploy:check        # wrangler deploy --dry-run: validates config, uploads nothing
 ```
@@ -167,7 +167,8 @@ Manage Account → Account API Tokens → Create Token → Custom token:
   is Account → Workers Scripts → Read.)
 
 **What the workflow does:**
-1. Install, type-check, test, and build, with no Cloudflare credentials present.
+1. Install, type-check, test, build, and verify the build (`npm run verify:dist`),
+   with no Cloudflare credentials present.
 2. Validate the target: Worker name `ninjatronics-v2`, static assets only from
    `./dist`, `workers_dev: true`, `preview_urls: false`, no routes or custom
    domains, no bindings or runtime variables, no committed `account_id`.

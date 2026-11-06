@@ -47,5 +47,8 @@ jobs:
       - name: Production build
         run: npm run build
 
+      - name: Verify built site (canonicals, CSP-safe markup, links, redirects, sitemap, RSS, drafts, accessibility basics)
+        run: npm run verify:dist
+
       - name: Validate Worker configuration (no upload)
         run: npm run deploy:check
