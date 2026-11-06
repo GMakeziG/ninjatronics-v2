@@ -7,7 +7,7 @@ description: "How I isolate the real cause of directory-related issues before ma
 pubDate: 2026-08-02
 category: "security"
 tags: ["active-directory", "identity", "troubleshooting"]
-draft: true
+draft: false
 legacyUrls: ["/valley/hall-of-knowledge/active-directory-troubleshooting-workflow"]
 ---
 

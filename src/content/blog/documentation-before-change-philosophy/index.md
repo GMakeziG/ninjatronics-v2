@@ -7,7 +7,7 @@ description: "The single habit that has saved the most time across two decades o
 pubDate: 2026-08-02
 category: "platform-engineering"
 tags: ["documentation", "career", "process"]
-draft: true
+draft: false
 legacyUrls: ["/valley/hall-of-knowledge/documentation-before-change-philosophy"]
 ---
 

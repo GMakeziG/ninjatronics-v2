@@ -7,7 +7,7 @@ description: "Practical guidelines for writing PowerShell automation that stays 
 pubDate: 2026-08-02
 category: "automation"
 tags: ["powershell", "automation", "scripting"]
-draft: true
+draft: false
 legacyUrls: ["/valley/hall-of-knowledge/powershell-automation-principles"]
 ---
 

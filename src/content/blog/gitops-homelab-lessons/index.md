@@ -7,7 +7,7 @@ description: "What running a Kubernetes homelab reconciled entirely from Git act
 pubDate: 2026-08-02
 category: "gitops"
 tags: ["kubernetes", "gitops", "homelab"]
-draft: true
+draft: false
 legacyUrls: ["/valley/hall-of-knowledge/gitops-homelab-lessons"]
 ---
 
