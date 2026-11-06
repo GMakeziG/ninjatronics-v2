@@ -67,12 +67,13 @@ jobs:
         timeout-minutes: 8
         run: npm ci
 
-      - name: Type-check, test, and build
+      - name: Type-check, test, build, and verify the build
         timeout-minutes: 10
         run: |
           npm run check
           npm test
           npm run build
+          npm run verify:dist
 
       - name: Validate deployment target
         timeout-minutes: 2

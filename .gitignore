@@ -26,3 +26,7 @@ npm-debug.log*
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+
+# Local release-preparation evidence and proposed vault copies (never commit:
+# may contain infrastructure details).
+.release-prep/
