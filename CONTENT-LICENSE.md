@@ -16,7 +16,7 @@ written permission.
 | Site name, taglines, and descriptive copy | the text values in `src/config/site.ts` |
 | Logos, marks, favicons, and other brand graphics | `public/brand/`, `public/favicon.svg`, `public/favicon.ico`, `public/apple-touch-icon.png` |
 | Original graphics embedded as code (the logo and branch-line artwork) | `src/components/Logo.astro`, `src/components/BranchLines.astro` |
-| Design references and brand reviews | `docs/design/`, `src/pages/brand-preview.astro` |
+| Design references and brand reviews | `docs/design/` |
 
 "Ninjatronics", the Ninjatronics logo, and the shuriken mark identify the
 author and this site. Nothing in this repository grants permission to use

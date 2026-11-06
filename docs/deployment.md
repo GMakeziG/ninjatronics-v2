@@ -278,7 +278,7 @@ Against the Access-protected URL (authenticate first):
   shows no CSP violations.
 - `robots.txt`, `sitemap-index.xml`, `rss.xml`, canonical URLs, and
   `og:url` all use `https://ninjatronics.io`.
-- No draft content, and (after logo approval) no `/brand-preview`.
+- No draft content, and no `/brand-preview` (404).
 
 ---
 
@@ -298,7 +298,7 @@ Against the Access-protected URL (authenticate first):
 **Before:**
 - [ ] All six legacy articles published in v2 with `legacyUrls` (the five
       Hall of Knowledge notes and the WordPress "Error Budgets" post).
-- [ ] Logo approved, `/brand-preview` removed, default social image added.
+- [x] Logo approved, `/brand-preview` removed, default social image added.
 - [ ] Staging smoke test passed on the commit being promoted.
 - [ ] Production baseline captured and reviewed (§5.1), on the cutover day
       or no more than 24 hours before.
