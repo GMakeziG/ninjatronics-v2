@@ -9,7 +9,22 @@
 //      This also proves the token and account ID are valid, so the denial in
 //      step 2 can't be an invalid-token error in disguise.
 //   2. Cloudflare explicitly denies the same token on the other Worker:
-//      HTTP 403, success false, error code 10000 ("Forbidden").
+//      HTTP 403, success false, error code 10000 ("Forbidden"); or the
+//      narrow code-less denial below, ONLY for a verified message on the
+//      Worker pair it was verified for.
+//
+// Code-less denial (observed 2026-11-08, staging run 42520021640): Cloudflare
+// answered the out-of-scope Worker with HTTP 403 and one error that has a
+// message but no code. It counts as a denial only if ALL hold:
+//   status 403; media type application/json; no cf-mitigated or
+//   www-authenticate header; body has exactly the fields success, errors,
+//   messages, result; success === false; result === null; messages is an
+//   empty array; errors is exactly one plain object whose only field is
+//   "message" (no code, no documentation_url); and the (allowed, denied,
+//   message) triple EXACTLY equals an entry of CODELESS_DENIALS.
+// Only the staging check has a verified entry. The production check
+// (reverse direction) still needs code 10000 until its own response is
+// verified the same way.
 // Anything else fails: network errors, timeouts, non-JSON bodies, 401, 404
 // (not found is not a denial), 5xx, or a success on the denied Worker.
 // The token and account ID are never printed.
@@ -32,6 +47,20 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { captureDenial, readDefaultConfig, type CaptureConfig } from "./denial-capture.ts";
 export const DENIAL_CODES = [10000];
+
+// Verified code-less permission denials, each scoped to the exact check
+// (token's own Worker -> denied Worker) it was observed in. Never add an
+// entry without evidence from a real response, and never a generic
+// authentication message.
+//   1. Staging token denied on ninjatronics-v2-production. Structure: runs
+//      42518058588 and 42520021640 (public structural diagnostics). Exact
+//      message: run 42523071768, captured age-encrypted and decrypted by the
+//      maintainer on 2026-11-08 (one error, fields ["message"], no code, no
+//      documentation_url).
+export interface CodelessDenial { allowed: string; denied: string; message: string }
+export const CODELESS_DENIALS: readonly Readonly<CodelessDenial>[] = Object.freeze([
+  Object.freeze({ allowed: "ninjatronics-v2", denied: "ninjatronics-v2-production", message: "No access to the specified resource." }),
+]);
 
 const API = "https://api.cloudflare.com/client/v4";
 const WORKER_NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -102,9 +131,35 @@ function headerFacts(h: Headers): HeaderFacts {
   };
 }
 
+const CODELESS_FIELDS = ["errors", "messages", "result", "success"];
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  v !== null && typeof v === "object" && !Array.isArray(v);
+
+// The exact structure of the observed code-less denial, message aside.
+export function hasCodelessDenialShape(r: Pick<ApiResponse, "status" | "body" | "facts">): boolean {
+  if (r.status !== 403) return false;
+  if (r.facts?.mediaType !== "application/json" || r.facts.cfMitigated !== false || r.facts.wwwAuthenticate !== false) return false;
+  const b = r.body as unknown;
+  if (!isPlainObject(b)) return false;
+  if (JSON.stringify(Object.keys(b).sort()) !== JSON.stringify(CODELESS_FIELDS)) return false;
+  if (b.success !== false || b.result !== null) return false;
+  if (!Array.isArray(b.messages) || b.messages.length !== 0) return false;
+  if (!Array.isArray(b.errors) || b.errors.length !== 1) return false;
+  const e = b.errors[0];
+  return isPlainObject(e) && Object.keys(e).length === 1 && typeof e.message === "string";
+}
+
+// Shape plus an exact (pair, message) match against CODELESS_DENIALS.
+export function isCodelessDenial(r: Pick<ApiResponse, "status" | "body" | "facts">, pair: { allowed: string; denied: string } | undefined,
+  allowlist: readonly Readonly<CodelessDenial>[] = CODELESS_DENIALS): boolean {
+  if (!pair || !hasCodelessDenialShape(r)) return false;
+  const message = ((r.body as any).errors[0] as { message: string }).message;
+  return allowlist.some((d) => d.allowed === pair.allowed && d.denied === pair.denied && d.message === message);
+}
+
 // Structural summary of a response for the public log (see the header
 // comment): no free-form text from the response is ever included.
-export function describeResponse(r: Pick<ApiResponse, "status" | "body" | "facts">): string {
+export function describeResponse(r: Pick<ApiResponse, "status" | "body" | "facts">, pair?: { allowed: string; denied: string }): string {
   const list = (v: unknown) => {
     if (!Array.isArray(v)) return v === undefined ? "absent" : "not-an-array";
     const objs = v.filter((e) => e !== null && typeof e === "object") as Record<string, unknown>[];
@@ -114,6 +169,7 @@ export function describeResponse(r: Pick<ApiResponse, "status" | "body" | "facts
       nonObjectEntries: v.length - objs.length,
       withMessage: objs.filter((e) => "message" in e).length,
       withDocumentationUrl: objs.filter((e) => "documentation_url" in e).length,
+      withOtherKeys: objs.filter((e) => Object.keys(e).some((k) => !["code", "message", "documentation_url"].includes(k))).length,
     };
   };
   const out: Record<string, unknown> = { status: r.status, ...(r.facts ?? {}) };
@@ -130,6 +186,9 @@ export function describeResponse(r: Pick<ApiResponse, "status" | "body" | "facts
   out.errors = list(o.errors);
   out.messages = list(o.messages);
   out.result = o.result === undefined ? "absent" : o.result === null ? null : Array.isArray(o.result) ? "array" : typeof o.result;
+  // Booleans only: never the message itself.
+  out.codelessDenialShape = hasCodelessDenialShape(r);
+  if (out.codelessDenialShape) out.messageAllowlisted = isCodelessDenial(r, pair);
   return JSON.stringify(out);
 }
 
@@ -153,8 +212,9 @@ const showCodes = (r: ApiResponse) => {
 
 export async function checkTokenScope(o: ScopeOptions): Promise<CheckResult> {
   const lines: string[] = [];
+  const pair = { allowed: o.allowed, denied: o.denied };
   const fail = (m: string, r?: ApiResponse): CheckResult =>
-    ({ ok: false, lines: [...lines, ...(r ? [`INFO response: ${describeResponse(r)}`] : []), `FAIL ${m}`] });
+    ({ ok: false, lines: [...lines, ...(r ? [`INFO response: ${describeResponse(r, pair)}`] : []), `FAIL ${m}`] });
 
   if (!o.token) return fail("CLOUDFLARE_API_TOKEN is empty");
   if (!ACCOUNT_ID.test(o.account)) return fail("CLOUDFLARE_ACCOUNT_ID is missing or not a 32-character hex ID");
@@ -181,7 +241,12 @@ export async function checkTokenScope(o: ScopeOptions): Promise<CheckResult> {
       : other.status === 401 ? " (authentication failed after step 1 succeeded)" : "";
     return fail(`${o.denied}: expected HTTP 403, got ${other.status}${hint}, codes ${showCodes(other)}`, other);
   }
-  if (other.body?.success !== false || !codes(other).some((c) => DENIAL_CODES.includes(c as number))) {
+  // Documented denial: unchanged rule (success false and code 10000).
+  const codedDenial = other.body?.success === false && codes(other).some((c) => DENIAL_CODES.includes(c as number));
+  // Verified code-less denial: exact shape, exact message, and only for the
+  // Worker pair it was verified on (CODELESS_DENIALS).
+  const codelessDenial = !codedDenial && isCodelessDenial(other, pair);
+  if (!codedDenial && !codelessDenial) {
     // Rejected. For the staging check only, log the error entries encrypted
     // (never in plaintext); this cannot change the outcome.
     try {
@@ -191,10 +256,13 @@ export async function checkTokenScope(o: ScopeOptions): Promise<CheckResult> {
     } catch {
       lines.push("INFO capture: failed unexpectedly; nothing captured");
     }
-    return fail(`${o.denied}: HTTP 403 without the expected denial (success ${showSuccess(other)}, codes ${showCodes(other)}, expected one of ${JSON.stringify(DENIAL_CODES)})`, other);
+    const why = hasCodelessDenialShape(other) ? "; code-less denial shape, but not a verified denial message for this check" : "";
+    return fail(`${o.denied}: HTTP 403 without the expected denial (success ${showSuccess(other)}, codes ${showCodes(other)}, expected one of ${JSON.stringify(DENIAL_CODES)}${why})`, other);
   }
-  lines.push(`INFO response: ${describeResponse(other)}`);
-  lines.push(`OK   ${o.denied}: explicitly denied (HTTP 403, code ${showCodes(other)})`);
+  lines.push(`INFO response: ${describeResponse(other, pair)}`);
+  lines.push(codedDenial
+    ? `OK   ${o.denied}: explicitly denied (HTTP 403, code ${showCodes(other)})`
+    : `OK   ${o.denied}: explicitly denied (HTTP 403, verified code-less denial message)`);
   return { ok: true, lines };
 }
 
