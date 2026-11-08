@@ -8,7 +8,10 @@ afterwards as the rollback target.
 ```
 GitHub GMakeziG/ninjatronics-v2
    main ──(manual "Deploy staging" workflow + "staging" environment approval)──▶ Worker "ninjatronics-v2"
-                                    (workers.dev, behind Cloudflare Access; ninjatronics.io after cutover)
+                                    (workers.dev, behind Cloudflare Access; never the production domain)
+   main ──(proposed: manual "Deploy production" + "production" approval,
+           only for a commit staging already deployed)──▶ Worker "ninjatronics-v2-production"
+                                    (ninjatronics.io after cutover; see the runbook §9)
    other branches → never deployed (pull-request previews are deferred; see §3)
 ```
 
@@ -295,9 +298,22 @@ Against the Access-protected URL (authenticate first):
 
 ## 5. Production cutover (separate approval)
 
+The step-by-step procedure, with verified facts, the dashboard checklist,
+smoke tests, monitoring, and rollback, is
+[`production-cutover-runbook.md`](production-cutover-runbook.md). This
+section is the summary.
+
 **Before:**
-- [ ] All six legacy articles published in v2 with `legacyUrls` (the five
-      Hall of Knowledge notes and the WordPress "Error Budgets" post).
+- [x] The five Hall of Knowledge notes published in v2 with `legacyUrls`.
+      The WordPress "Error Budgets" post is deferred (not a launch
+      requirement, 2026-11-06); its old URL returns 404 until it's published.
+- [ ] Legacy branch frozen: the legacy Worker is built by Workers Builds from
+      `GMakeziG/ninjatronics` `main`, so a push there redeploys production
+      and replaces the rollback target (runbook §2.4).
+- [ ] Staging and production separated: production gets its own Worker
+      (`ninjatronics-v2-production`), workflow, GitHub environment, and
+      single-Worker token; the staging workflow can't reach it (runbook §9).
+      The production domain is never attached to `ninjatronics-v2`.
 - [x] Logo approved, `/brand-preview` removed, default social image added.
 - [ ] Staging smoke test passed on the commit being promoted.
 - [ ] Production baseline captured and reviewed (§5.1), on the cutover day
@@ -310,7 +326,8 @@ Against the Access-protected URL (authenticate first):
 **Cutover** (about 15 minutes, low-traffic window). The legacy Worker's
 attachment (Custom Domain or Route) is whatever §5.1 records. Don't assume
 either one, and stop if §5.1 doesn't record it. The planned v2 attachment
-is always a Custom Domain on `ninjatronics-v2`.
+is always a Custom Domain on the production Worker
+`ninjatronics-v2-production` (runbook §9), never on staging `ninjatronics-v2`.
 0. Pre-check (read-only, no changes; do it before detaching anything):
    - Compare the **current** Cloudflare DNS records (DNS → Records, live in
      the dashboard) with the §5.1 baseline export: the apex and `www`
@@ -319,7 +336,7 @@ is always a Custom Domain on `ninjatronics-v2`.
      §5.1.
    - **If §5.1 records a Route:** look in the current DNS records for an
      apex record that would block adding a Custom Domain to
-     `ninjatronics-v2`.
+     `ninjatronics-v2-production`.
    - **Stop here, before step 1,** if a conflicting apex record exists or
      the current configuration differs from the baseline in any unexpected
      way. Removing a conflicting record, or explaining a difference, is a
@@ -331,14 +348,14 @@ is always a Custom Domain on `ninjatronics-v2`.
    - **If it's a Route:** Worker `ninjatronics` → Domains & Routes → remove
      the exact route pattern recorded in §5.1. The proxied apex DNS record
      stays.
-2. Worker `ninjatronics-v2` → Domains & Routes → add Custom Domain
+2. Worker `ninjatronics-v2-production` → Domains & Routes → add Custom Domain
    `ninjatronics.io`. Wait until it shows Active, with its certificate issued.
    **Decision point:** if the Custom Domain can't be added, or isn't Active
    within the approved activation timeout ("Before"), stop the cutover and
    immediately start §6, "Back to the legacy site". Don't continue to step 3.
 3. `www`: Redirect Rule `www.ninjatronics.io/*` → `https://ninjatronics.io/${path}`
-   (301, preserve query). Repoint the `www` record away from Hostinger to a
-   proxied placeholder.
+   (301, preserve query). The `www` record stays proxied and unchanged: the
+   rule answers before Hostinger (runbook §5 step 3).
 4. SSL/TLS → Edge Certificates → Always Use HTTPS: on. Leave HSTS **off**
    (see "After").
 5. Caching → Purge Everything.
@@ -419,11 +436,13 @@ or guessed ones.
 
 ## 6. Rollback
 
+Decision criteria and the full procedure: runbook §8.
+
 **Bad content or a bad build (v2 stays on the domain):**
-- Dashboard → `ninjatronics-v2` → Deployments → roll back to the previous
-  version (instant, no rebuild), **or**
-- revert the change through a pull request to `main`, then dispatch the
-  deploy workflow (§3.1).
+- Dashboard → `ninjatronics-v2-production` → Deployments → roll back to the
+  previous version (instant, no rebuild), **or**
+- revert the change through a pull request to `main`, deploy it to staging,
+  then promote it with "Deploy production" (runbook §9).
 
 **Staging exposure:** see §3.3, Containment and recovery.
 
@@ -431,11 +450,11 @@ or guessed ones.
 when cutover step 2 failed after the legacy Worker was already detached.
 It requires the legacy Worker to still be deployed at the version recorded
 in §5.1, and it depends on the attachment method recorded there:
-1. Worker `ninjatronics-v2` → Domains & Routes → remove the `ninjatronics.io`
-   Custom Domain if it exists in any state (active, pending, or failed). If
+1. Worker `ninjatronics-v2-production` → Domains & Routes → remove the
+   `ninjatronics.io` Custom Domain if it exists in any state (active, pending, or failed). If
    it was never created, skip this step.
-   Then confirm it's actually gone: it no longer appears in `ninjatronics-v2`
-   → Domains & Routes, and the dashboard no longer lists a Cloudflare-managed
+   Then confirm it's actually gone: it no longer appears in
+   `ninjatronics-v2-production` → Domains & Routes, and the dashboard no longer lists a Cloudflare-managed
    DNS record for it. **If removal fails or stays pending, stop and
    escalate.** Don't restore the legacy attachment while the v2 attachment
    may still exist: that would create a conflicting attachment.
