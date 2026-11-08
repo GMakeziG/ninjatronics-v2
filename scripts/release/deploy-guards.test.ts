@@ -234,7 +234,7 @@ test("code-less denial: NOT accepted for the production check (reverse direction
   const r = await prodScope(observed());
   assert.equal(r.ok, false);
   assert.match(r.lines.at(-1)!, /not a verified denial message for this check/);
-  assert.ok(!r.lines.some((l) => l.startsWith("INFO capture")), "the production check never captures");
+  assert.ok(!r.lines.join("\n").includes(VERIFIED), "the message appears only inside the encrypted capture");
 });
 
 test("code-less denial: the production check still passes with code 10000", async () => {

@@ -1,6 +1,7 @@
-// Encrypted diagnostic capture for the staging token-isolation check
+// Encrypted diagnostic capture for the token-isolation checks
 // (scripts/release/token-scope.ts). Temporary: remove once the code-less 403
-// message from Cloudflare is verified.
+// responses for both directions are verified (cleanup: docs/deployment.md,
+// "Production token diagnostic").
 //
 // Why: run 42520021640 showed that Cloudflare denies the staging token on
 // ninjatronics-v2-production with HTTP 403 and one error that has a message
@@ -10,9 +11,10 @@
 // only ASCII-armored ciphertext.
 //
 // Scope, all enforced here:
-//   - only the staging check (allowed ninjatronics-v2, denied
-//     ninjatronics-v2-production), only for an HTTP 403 JSON body with
-//     success false that the guard is about to REJECT;
+//   - only the two token-isolation checks in CAPTURE_PAIRS (the staging
+//     token: ninjatronics-v2 -> ninjatronics-v2-production; the production
+//     token: ninjatronics-v2-production -> ninjatronics-v2), only for an HTTP
+//     403 JSON body with success false that the guard is about to REJECT;
 //   - captures only the errors entries (max 3): their field names, the type
 //     of code, whether documentation_url is present, and the message with the
 //     token and account ID removed. Nothing else from the response, and no
@@ -28,7 +30,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Encrypter, armor } from "age-encryption";
 
-export const CAPTURE_PAIR = { allowed: "ninjatronics-v2", denied: "ninjatronics-v2-production" } as const;
+export interface CapturePair { readonly allowed: string; readonly denied: string }
+export const CAPTURE_PAIRS: readonly CapturePair[] = Object.freeze([
+  Object.freeze({ allowed: "ninjatronics-v2", denied: "ninjatronics-v2-production" }), // staging token
+  Object.freeze({ allowed: "ninjatronics-v2-production", denied: "ninjatronics-v2" }), // production token
+]);
+export const isCapturePair = (allowed: string, denied: string) =>
+  CAPTURE_PAIRS.some((p) => p.allowed === allowed && p.denied === denied);
 
 // The maintainer's public key (`age-keygen -y`), one line. The private key
 // exists only on the maintainer's machine; nothing here or in CI needs it.
@@ -87,7 +95,7 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> =>
 // Is this the response the capture exists for? Pair, status, JSON object
 // body, success false, and errors present as an array.
 export function isCaptureTarget(i: CaptureInput): boolean {
-  return i.allowed === CAPTURE_PAIR.allowed && i.denied === CAPTURE_PAIR.denied &&
+  return isCapturePair(i.allowed, i.denied) &&
     i.status === 403 && i.mediaType === "application/json" &&
     isPlainObject(i.body) && i.body.success === false && Array.isArray(i.body.errors);
 }
@@ -127,8 +135,8 @@ export const ageEncrypt: Encrypt = async (plaintext, recipient) => {
 // Returns log lines. Never throws, never returns plaintext. buildPayload
 // runs inside the try, so a malformed body also ends as "nothing captured".
 export async function captureDenial(i: CaptureInput, config: CaptureConfig): Promise<string[]> {
-  if (i.allowed !== CAPTURE_PAIR.allowed || i.denied !== CAPTURE_PAIR.denied) return [];
-  if (!isCaptureTarget(i)) return ["INFO capture: skipped (not the expected staging-token denial)"];
+  if (!isCapturePair(i.allowed, i.denied)) return [];
+  if (!isCaptureTarget(i)) return ["INFO capture: skipped (not the expected token-isolation denial)"];
   const r = checkRecipient(config.recipientText, config.expectedSha256);
   if (!r.ok) return [`INFO capture: skipped (${r.reason}); nothing captured`];
   let armored: string;

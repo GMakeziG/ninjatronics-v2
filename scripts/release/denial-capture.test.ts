@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { Decrypter, armor, generateX25519Identity, generateHybridIdentity, identityToRecipient } from "age-encryption";
 import {
   captureDenial, checkRecipient, buildPayload, isCaptureTarget, sha256, readDefaultConfig,
-  RECIPIENT_SHA256, CAPTURE_PAIR, type CaptureInput, type CaptureConfig,
+  RECIPIENT_SHA256, CAPTURE_PAIRS, isCapturePair, type CaptureInput, type CaptureConfig,
 } from "./denial-capture.ts";
 import { checkTokenScope } from "./token-scope.ts";
 
@@ -22,7 +22,7 @@ const config = (over: Partial<CaptureConfig> = {}): CaptureConfig =>
   ({ recipientText: `${recipient}\n`, expectedSha256: sha256(recipient), ...over });
 const observedBody = (message: unknown = MESSAGE) => ({ success: false, errors: [{ message }], messages: [], result: null });
 const input = (over: Partial<CaptureInput> = {}): CaptureInput => ({
-  allowed: CAPTURE_PAIR.allowed, denied: CAPTURE_PAIR.denied, status: 403, mediaType: "application/json",
+  allowed: "ninjatronics-v2", denied: "ninjatronics-v2-production", status: 403, mediaType: "application/json",
   body: observedBody(), token: TOKEN, account: ACCOUNT, ...over,
 });
 const decrypt = async (lines: string[], id = identity) => {
@@ -156,14 +156,56 @@ for (const [label, encrypt] of [
 
 // ---- scope: only the expected staging denial ----------------------------------------
 
-test("capture: never runs for any other Worker pair (e.g. the production check)", async () => {
+test("capture: exactly two frozen pairs, staging token and production token", () => {
+  assert.deepEqual(CAPTURE_PAIRS.map((p) => ({ ...p })), [
+    { allowed: "ninjatronics-v2", denied: "ninjatronics-v2-production" },
+    { allowed: "ninjatronics-v2-production", denied: "ninjatronics-v2" },
+  ]);
+  assert.ok(Object.isFrozen(CAPTURE_PAIRS) && CAPTURE_PAIRS.every((p) => Object.isFrozen(p)));
+});
+
+test("capture: never runs for any other Worker pair", async () => {
   let called = false;
   const spy = config({ encrypt: async () => { called = true; return "x"; } });
-  for (const [allowed, denied] of [["ninjatronics-v2-production", "ninjatronics-v2"], ["a", "b"], ["ninjatronics-v2", "other"]]) {
+  for (const [allowed, denied] of [["a", "b"], ["ninjatronics-v2", "other"], ["ninjatronics-v2-production", "other"],
+    ["ninjatronics-v2", "ninjatronics-v2"], ["ninjatronics-v2-production", "ninjatronics-v2-production"], ["other", "ninjatronics-v2"]]) {
+    assert.equal(isCapturePair(allowed, denied), false);
     assert.deepEqual(await captureDenial(input({ allowed, denied }), spy), []);
   }
   assert.equal(called, false);
 });
+
+test("capture: the production-token direction encrypts the same way", async () => {
+  const lines = await captureDenial(input({ allowed: "ninjatronics-v2-production", denied: "ninjatronics-v2" }), config());
+  assert.match(lines[0], /^INFO capture: age-encrypted/);
+  noPlaintext(lines.join("\n"));
+  assert.equal((await decrypt(lines)).errors[0].message, MESSAGE);
+});
+
+for (const [label, over] of [
+  ["HTTP 401", { status: 401 }], ["HTTP 404", { status: 404 }], ["a non-JSON media type", { mediaType: "text/html" }],
+  ["success true", { body: { ...observedBody(), success: true } }], ["errors not an array", { body: { success: false, errors: {} } }],
+] as [string, Partial<CaptureInput>][]) {
+  test(`capture: production direction skipped for ${label}`, async () => {
+    let called = false;
+    const lines = await captureDenial(input({ allowed: "ninjatronics-v2-production", denied: "ninjatronics-v2", ...over }),
+      config({ encrypt: async () => { called = true; return "x"; } }));
+    assert.equal(called, false);
+    assert.deepEqual(lines, ["INFO capture: skipped (not the expected token-isolation denial)"]);
+  });
+}
+
+for (const [label, encrypt] of [
+  ["throws", async () => { throw new Error(MESSAGE); }],
+  ["returns plaintext", async (p: string) => p],
+] as [string, (p: string) => Promise<string>][]) {
+  test(`capture: production direction prints no plaintext when the encrypter ${label}`, async () => {
+    const lines = await captureDenial(input({ allowed: "ninjatronics-v2-production", denied: "ninjatronics-v2" }), config({ encrypt }));
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /encryption failed .*nothing captured/);
+    noPlaintext(lines.join("\n"));
+  });
+}
 
 for (const [label, over] of [
   ["HTTP 401", { status: 401 }],
@@ -181,7 +223,7 @@ for (const [label, over] of [
     let called = false;
     const lines = await captureDenial(input(over), config({ encrypt: async () => { called = true; return "x"; } }));
     assert.equal(called, false);
-    assert.deepEqual(lines, ["INFO capture: skipped (not the expected staging-token denial)"]);
+    assert.deepEqual(lines, ["INFO capture: skipped (not the expected token-isolation denial)"]);
   });
 }
 
@@ -247,16 +289,60 @@ test("guard + capture: a 200 on the denied Worker fails without any capture", as
   assert.equal(called, false);
 });
 
-test("guard + capture: the production check (reverse pair) never captures, even with the committed key", async () => {
+const prodCheck = (other: () => Response, capture?: CaptureConfig) => checkTokenScope({
+  fetch: (async (u: RequestInfo | URL) => String(u).endsWith("/ninjatronics-v2-production")
+    ? json(200, { success: true, result: { name: "ninjatronics-v2-production" }, errors: [] })
+    : other()) as typeof fetch,
+  account: ACCOUNT, token: TOKEN, allowed: "ninjatronics-v2-production", denied: "ninjatronics-v2", timeoutMs: 200, ...(capture ? { capture } : {}),
+});
+
+test("guard + capture: the production check still FAILS on a code-less 403, with ciphertext only (committed key)", async () => {
+  const r = await prodCheck(() => json(403, observedBody()));
+  assert.equal(r.ok, false);
+  assert.match(r.lines.at(-1)!, /^FAIL ninjatronics-v2: HTTP 403 without the expected denial/);
+  assert.ok(r.lines.includes("-----BEGIN AGE ENCRYPTED FILE-----"), r.lines.join("\n"));
+  noPlaintext(r.lines.join("\n"));
+});
+
+test("guard + capture: the production check FAILS on the staging-verified message too (not allowlisted for this direction)", async () => {
+  const r = await prodCheck(() => json(403, observedBody("No access to the specified resource.")), config());
+  assert.equal(r.ok, false);
+  assert.match(r.lines.at(-1)!, /not a verified denial message for this check/);
+  const start = r.lines.indexOf("-----BEGIN AGE ENCRYPTED FILE-----");
+  const end = r.lines.indexOf("-----END AGE ENCRYPTED FILE-----");
+  assert.equal((await decrypt(r.lines.slice(start - 1, end + 1))).errors[0].message, "No access to the specified resource.");
+  assert.ok(!r.lines.join("\n").includes("No access"), "message only inside the ciphertext");
+});
+
+test("guard + capture: the production check passes with code 10000 and captures nothing", async () => {
+  let called = false;
+  const r = await prodCheck(() => json(403, { success: false, errors: [{ code: 10000, message: MESSAGE }], messages: [], result: null }),
+    config({ encrypt: async () => { called = true; return "x"; } }));
+  assert.equal(r.ok, true, r.lines.join("\n"));
+  assert.equal(called, false);
+  noPlaintext(r.lines.join("\n"));
+});
+
+for (const [label, status] of [["401", 401], ["404", 404], ["500", 500]] as [string, number][]) {
+  test(`guard + capture: the production check fails on HTTP ${label} without capture`, async () => {
+    let called = false;
+    const r = await prodCheck(() => json(status, observedBody()), config({ encrypt: async () => { called = true; return "x"; } }));
+    assert.equal(r.ok, false);
+    assert.equal(called, false);
+    noPlaintext(r.lines.join("\n"));
+  });
+}
+
+test("guard + capture: the production check fails when its own Worker is not readable, without capture", async () => {
+  let called = false;
   const r = await checkTokenScope({
-    fetch: (async (u: RequestInfo | URL) => String(u).endsWith("/ninjatronics-v2-production")
-      ? json(200, { success: true, result: { name: "ninjatronics-v2-production" }, errors: [] })
-      : json(403, observedBody())) as typeof fetch,
+    fetch: (async () => json(403, observedBody())) as typeof fetch,
     account: ACCOUNT, token: TOKEN, allowed: "ninjatronics-v2-production", denied: "ninjatronics-v2", timeoutMs: 200,
+    capture: config({ encrypt: async () => { called = true; return "x"; } }),
   });
   assert.equal(r.ok, false);
-  assert.ok(!r.lines.some((l) => l.startsWith("INFO capture") || l.includes("AGE ENCRYPTED")), r.lines.join("\n"));
-  noPlaintext(r.lines.join("\n"));
+  assert.match(r.lines.at(-1)!, /can't read its own Worker/);
+  assert.equal(called, false);
 });
 
 test("guard + capture: a capture that throws cannot change the decision", async () => {
