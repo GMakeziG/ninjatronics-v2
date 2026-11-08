@@ -186,20 +186,23 @@ test("token scope: an own-Worker failure is logged, a success on the denied Work
 });
 
 // ---- token-scope: verified code-less 403 denial --------------------------------
-// Staging run 42523071768 (encrypted capture, decrypted by the maintainer):
-// the staging token on ninjatronics-v2-production gets HTTP 403 with
+// Staging run 42523071768 and production-token diagnostic run 42530276420
+// (encrypted captures, decrypted by the maintainer): each token, on the other
+// environment's Worker, gets HTTP 403 with
 // {success:false, errors:[{message:"No access to the specified resource."}],
-// messages:[], result:null}. Accepted ONLY in that exact form and direction.
+// messages:[], result:null}. Accepted ONLY in that exact form and only for
+// those two directions.
 
 const VERIFIED = "No access to the specified resource.";
 const observed = (message: unknown = VERIFIED, over: Record<string, unknown> = {}, headers: Record<string, string> = {}) => () =>
   new Response(JSON.stringify({ success: false, errors: [{ message }], messages: [], result: null, ...over }),
     { status: 403, headers: { "content-type": "application/json", ...headers } });
 const STAGING_PAIR = { allowed: "ninjatronics-v2", denied: "ninjatronics-v2-production" };
+const PROD_PAIR = { allowed: "ninjatronics-v2-production", denied: "ninjatronics-v2" };
 
-test("code-less denial: exactly one verified entry, for the staging check only, frozen", () => {
-  assert.deepEqual(CODELESS_DENIALS.map((d) => ({ ...d })), [{ ...STAGING_PAIR, message: VERIFIED }]);
-  assert.ok(Object.isFrozen(CODELESS_DENIALS) && Object.isFrozen(CODELESS_DENIALS[0]));
+test("code-less denial: exactly two verified entries (staging and production directions), frozen", () => {
+  assert.deepEqual(CODELESS_DENIALS.map((d) => ({ ...d })), [{ ...STAGING_PAIR, message: VERIFIED }, { ...PROD_PAIR, message: VERIFIED }]);
+  assert.ok(Object.isFrozen(CODELESS_DENIALS) && CODELESS_DENIALS.every((d) => Object.isFrozen(d)));
 });
 
 test("code-less denial: the observed staging response passes", async () => {
@@ -230,12 +233,20 @@ const prodStub = (other: Route): typeof fetch => (async (input: RequestInfo | UR
 const prodScope = (other: Route) => checkTokenScope({ fetch: prodStub(other), account: ACCOUNT, token: TOKEN,
   allowed: "ninjatronics-v2-production", denied: "ninjatronics-v2", timeoutMs: 200 });
 
-test("code-less denial: NOT accepted for the production check (reverse direction, unverified)", async () => {
+test("code-less denial: the observed production response passes", async () => {
   const r = await prodScope(observed());
-  assert.equal(r.ok, false);
-  assert.match(r.lines.at(-1)!, /not a verified denial message for this check/);
-  assert.ok(!r.lines.join("\n").includes(VERIFIED), "the message appears only inside the encrypted capture");
+  assert.equal(r.ok, true, r.lines.join("\n"));
+  assert.match(r.lines.at(-1)!, /^OK   ninjatronics-v2: explicitly denied \(HTTP 403, verified code-less denial message\)$/);
+  assert.match(r.lines.at(-2)!, /"codelessDenialShape":true,"messageAllowlisted":true/);
+  assert.ok(!r.lines.some((l) => l.startsWith("INFO capture")), "an accepted denial is never captured");
+  assert.ok(!r.lines.join("\n").includes(VERIFIED), "the message itself is never printed");
 });
+
+// Every negative case below runs for both verified directions.
+const DIRECTIONS: [string, (other: Route) => ReturnType<typeof checkTokenScope>][] = [
+  ["staging", (other) => scope(cfStub(ownOk, other))],
+  ["production", prodScope],
+];
 
 test("code-less denial: the production check still passes with code 10000", async () => {
   const r = await prodScope(denied);
@@ -243,13 +254,22 @@ test("code-less denial: the production check still passes with code 10000", asyn
 });
 
 test("code-less denial: NOT accepted for any other Worker pair", async () => {
-  const other = { fetch: (async (u: RequestInfo | URL) => String(u).endsWith("/a-worker")
-    ? json(200, { success: true, result: { name: "a-worker" }, errors: [] }) : observed()()) as typeof fetch };
-  const r = await checkTokenScope({ ...other, account: ACCOUNT, token: TOKEN, allowed: "a-worker", denied: "ninjatronics-v2-production", timeoutMs: 200 });
-  assert.equal(r.ok, false);
+  for (const denied of ["ninjatronics-v2-production", "ninjatronics-v2"]) {
+    const other = { fetch: (async (u: RequestInfo | URL) => String(u).endsWith("/a-worker")
+      ? json(200, { success: true, result: { name: "a-worker" }, errors: [] }) : observed()()) as typeof fetch };
+    const r = await checkTokenScope({ ...other, account: ACCOUNT, token: TOKEN, allowed: "a-worker", denied, timeoutMs: 200 });
+    assert.equal(r.ok, false, `a-worker -> ${denied}`);
+  }
   const body = { success: false, errors: [{ message: VERIFIED }], messages: [], result: null };
   const facts = { mediaType: "application/json", cfMitigated: false, wwwAuthenticate: false };
-  assert.equal(isCodelessDenial({ status: 403, body, facts }, { allowed: "ninjatronics-v2", denied: "other" }), false);
+  for (const pair of [
+    { allowed: "ninjatronics-v2", denied: "other" }, { allowed: "ninjatronics-v2-production", denied: "other" },
+    { allowed: "other", denied: "ninjatronics-v2" }, { allowed: "other", denied: "ninjatronics-v2-production" },
+    { allowed: "ninjatronics-v2", denied: "ninjatronics-v2" }, { allowed: "ninjatronics-v2-production", denied: "ninjatronics-v2-production" },
+    { allowed: "NINJATRONICS-V2", denied: "ninjatronics-v2-production" }, { allowed: "ninjatronics-v2-production ", denied: "ninjatronics-v2" },
+  ]) assert.equal(isCodelessDenial({ status: 403, body, facts }, pair), false, JSON.stringify(pair));
+  assert.equal(isCodelessDenial({ status: 403, body, facts }, STAGING_PAIR), true);
+  assert.equal(isCodelessDenial({ status: 403, body, facts }, PROD_PAIR), true);
 });
 
 for (const [label, message] of [
@@ -272,11 +292,13 @@ for (const [label, message] of [
   ["a non-string message", ["No access to the specified resource."]],
   ["a null message", null],
 ] as [string, unknown][]) {
-  test(`code-less denial: rejects a similar message (${label})`, async () => {
-    const r = await scope(cfStub(ownOk, observed(message)));
-    assert.equal(r.ok, false, r.lines.join("\n"));
-    assert.match(r.lines.at(-1)!, /^FAIL /);
-  });
+  for (const [dir, run] of DIRECTIONS) {
+    test(`code-less denial [${dir}]: rejects a similar message (${label})`, async () => {
+      const r = await run(observed(message));
+      assert.equal(r.ok, false, r.lines.join("\n"));
+      assert.match(r.lines.at(-1)!, /^FAIL /);
+    });
+  }
 }
 
 for (const [label, other] of [
@@ -311,27 +333,36 @@ for (const [label, other] of [
   ["a JSON array body", () => json(403, [{ message: VERIFIED }])],
   ["a JSON null body", () => json(403, null)],
 ] as [string, Route][]) {
-  test(`code-less denial: rejected on ${label}`, async () => {
-    const r = await scope(cfStub(ownOk, other));
-    assert.equal(r.ok, false, r.lines.join("\n"));
-    assert.match(r.lines.at(-1)!, /^FAIL /);
-  });
+  for (const [dir, run] of DIRECTIONS) {
+    test(`code-less denial [${dir}]: rejected on ${label}`, async () => {
+      const r = await run(other);
+      assert.equal(r.ok, false, r.lines.join("\n"));
+      assert.match(r.lines.at(-1)!, /^FAIL /);
+    });
+  }
 }
 
 for (const [label, status] of [
   ["401 authentication failure", 401], ["400 authentication failure", 400], ["404", 404], ["429", 429], ["500", 500], ["502", 502], ["503", 503], ["302", 302],
 ] as [string, number][]) {
-  test(`code-less denial: the verified body is rejected with HTTP ${label}`, async () => {
-    const r = await scope(cfStub(ownOk, () => json(status, { success: false, errors: [{ message: VERIFIED }], messages: [], result: null })));
-    assert.equal(r.ok, false);
-    assert.match(r.lines.at(-1)!, new RegExp(`expected HTTP 403, got ${status}`));
-  });
+  for (const [dir, run] of DIRECTIONS) {
+    test(`code-less denial [${dir}]: the verified body is rejected with HTTP ${label}`, async () => {
+      const r = await run(() => json(status, { success: false, errors: [{ message: VERIFIED }], messages: [], result: null }));
+      assert.equal(r.ok, false);
+      assert.match(r.lines.at(-1)!, new RegExp(`expected HTTP 403, got ${status}`));
+    });
+  }
 }
 
-test("code-less denial: the token's own Worker must still return 200 first", async () => {
-  const r = await scope(cfStub(() => json(403, { success: false, errors: [{ message: VERIFIED }], messages: [], result: null }), observed()));
+test("code-less denial: the token's own Worker must still return 200 first (both directions)", async () => {
+  const codeless403 = () => json(403, { success: false, errors: [{ message: VERIFIED }], messages: [], result: null });
+  const r = await scope(cfStub(codeless403, observed()));
   assert.equal(r.ok, false);
   assert.match(r.lines.at(-1)!, /can't read its own Worker/);
+  const p = await checkTokenScope({ fetch: (async () => codeless403()) as typeof fetch, account: ACCOUNT, token: TOKEN,
+    allowed: "ninjatronics-v2-production", denied: "ninjatronics-v2", timeoutMs: 200 });
+  assert.equal(p.ok, false);
+  assert.match(p.lines.at(-1)!, /can't read its own Worker/);
 });
 
 test("code-less denial: shape and match helpers agree with the guard; missing facts fail closed", () => {
@@ -339,14 +370,15 @@ test("code-less denial: shape and match helpers agree with the guard; missing fa
   const body = { success: false, errors: [{ message: VERIFIED }], messages: [], result: null };
   assert.equal(hasCodelessDenialShape({ status: 403, body, facts }), true);
   assert.equal(isCodelessDenial({ status: 403, body, facts }, STAGING_PAIR), true);
+  assert.equal(isCodelessDenial({ status: 403, body, facts }, PROD_PAIR), true);
   assert.equal(isCodelessDenial({ status: 403, body, facts }, undefined), false);
   assert.equal(isCodelessDenial({ status: 403, body, facts }, STAGING_PAIR, []), false, "empty allowlist accepts nothing");
   assert.equal(hasCodelessDenialShape({ status: 403, body, facts: undefined }), false);
 });
 
-test("code-less denial: no message text, token, or account ID reaches the output", async () => {
-  for (const other of [observed(), observed(`${VERIFIED} ${TOKEN} ${ACCOUNT} SECRET-MESSAGE-TEXT`)]) {
-    const r = await scope(cfStub(ownOk, other));
+test("code-less denial: no message text, token, or account ID reaches the output (both directions)", async () => {
+  for (const [other, run] of [observed(), observed(`${VERIFIED} ${TOKEN} ${ACCOUNT} SECRET-MESSAGE-TEXT`)].flatMap((o) => DIRECTIONS.map(([, run]) => [o, run] as const))) {
+    const r = await run(other);
     const out = r.lines.join("\n");
     for (const p of [TOKEN, ACCOUNT, "SECRET-MESSAGE-TEXT", "No access"]) assert.ok(!out.includes(p), `leaked "${p}":\n${out}`);
   }

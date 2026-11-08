@@ -304,13 +304,21 @@ test("guard + capture: the production check still FAILS on a code-less 403, with
   noPlaintext(r.lines.join("\n"));
 });
 
-test("guard + capture: the production check FAILS on the staging-verified message too (not allowlisted for this direction)", async () => {
-  const r = await prodCheck(() => json(403, observedBody("No access to the specified resource.")), config());
+test("guard + capture: the production check accepts the verified code-less denial and captures nothing", async () => {
+  let called = false;
+  const r = await prodCheck(() => json(403, observedBody("No access to the specified resource.")), config({ encrypt: async () => { called = true; return "x"; } }));
+  assert.equal(r.ok, true, r.lines.join("\n"));
+  assert.equal(called, false, "capture runs only on rejection");
+  assert.ok(!r.lines.join("\n").includes("No access"), "the message is never printed");
+});
+
+test("guard + capture: the production check rejects a different code-less message, captured as ciphertext only", async () => {
+  const r = await prodCheck(() => json(403, observedBody("No access to the specified resource")), config());
   assert.equal(r.ok, false);
   assert.match(r.lines.at(-1)!, /not a verified denial message for this check/);
   const start = r.lines.indexOf("-----BEGIN AGE ENCRYPTED FILE-----");
   const end = r.lines.indexOf("-----END AGE ENCRYPTED FILE-----");
-  assert.equal((await decrypt(r.lines.slice(start - 1, end + 1))).errors[0].message, "No access to the specified resource.");
+  assert.equal((await decrypt(r.lines.slice(start - 1, end + 1))).errors[0].message, "No access to the specified resource");
   assert.ok(!r.lines.join("\n").includes("No access"), "message only inside the ciphertext");
 });
 
