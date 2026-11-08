@@ -22,9 +22,8 @@
 //   empty array; errors is exactly one plain object whose only field is
 //   "message" (no code, no documentation_url); and the (allowed, denied,
 //   message) triple EXACTLY equals an entry of CODELESS_DENIALS.
-// Only the staging check has a verified entry. The production check
-// (reverse direction) still needs code 10000 until its own response is
-// verified the same way.
+// Both checks have a verified entry (staging token -> production Worker, and
+// production token -> staging Worker). Any other pair still needs code 10000.
 // Anything else fails: network errors, timeouts, non-JSON bodies, 401, 404
 // (not found is not a denial), 5xx, or a success on the denied Worker.
 // The token and account ID are never printed.
@@ -57,9 +56,15 @@ export const DENIAL_CODES = [10000];
 //      message: run 42523071768, captured age-encrypted and decrypted by the
 //      maintainer on 2026-11-08 (one error, fields ["message"], no code, no
 //      documentation_url).
+//   2. Production token denied on ninjatronics-v2. Structure and exact
+//      message: run 42530276420 (diagnose-production-token.yml), structural
+//      diagnostic codelessDenialShape true, captured age-encrypted and
+//      decrypted by the maintainer on 2026-11-08 (one error, fields
+//      ["message"], no code, no documentation_url; same message as entry 1).
 export interface CodelessDenial { allowed: string; denied: string; message: string }
 export const CODELESS_DENIALS: readonly Readonly<CodelessDenial>[] = Object.freeze([
   Object.freeze({ allowed: "ninjatronics-v2", denied: "ninjatronics-v2-production", message: "No access to the specified resource." }),
+  Object.freeze({ allowed: "ninjatronics-v2-production", denied: "ninjatronics-v2", message: "No access to the specified resource." }),
 ]);
 
 const API = "https://api.cloudflare.com/client/v4";
