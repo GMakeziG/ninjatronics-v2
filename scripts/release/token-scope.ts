@@ -30,6 +30,7 @@
 
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { captureDenial, readDefaultConfig, type CaptureConfig } from "./denial-capture.ts";
 export const DENIAL_CODES = [10000];
 
 const API = "https://api.cloudflare.com/client/v4";
@@ -43,6 +44,9 @@ export interface ScopeOptions {
   allowed: string;
   denied: string;
   timeoutMs?: number;
+  // Encrypted diagnostic capture (scripts/release/denial-capture.ts). Tests
+  // pass their own; the CLI uses the committed recipient and fingerprint.
+  capture?: CaptureConfig;
 }
 
 export interface CheckResult {
@@ -178,6 +182,15 @@ export async function checkTokenScope(o: ScopeOptions): Promise<CheckResult> {
     return fail(`${o.denied}: expected HTTP 403, got ${other.status}${hint}, codes ${showCodes(other)}`, other);
   }
   if (other.body?.success !== false || !codes(other).some((c) => DENIAL_CODES.includes(c as number))) {
+    // Rejected. For the staging check only, log the error entries encrypted
+    // (never in plaintext); this cannot change the outcome.
+    try {
+      lines.push(...await captureDenial(
+        { allowed: o.allowed, denied: o.denied, status: other.status, mediaType: other.facts?.mediaType, body: other.body, token: o.token, account: o.account },
+        o.capture ?? readDefaultConfig()));
+    } catch {
+      lines.push("INFO capture: failed unexpectedly; nothing captured");
+    }
     return fail(`${o.denied}: HTTP 403 without the expected denial (success ${showSuccess(other)}, codes ${showCodes(other)}, expected one of ${JSON.stringify(DENIAL_CODES)})`, other);
   }
   lines.push(`INFO response: ${describeResponse(other)}`);
