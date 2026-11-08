@@ -2,7 +2,7 @@
 // Run: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkTokenScope } from "./token-scope.ts";
+import { checkTokenScope, CODELESS_DENIALS, hasCodelessDenialShape, isCodelessDenial } from "./token-scope.ts";
 import { checkStagingPromotion, STAGING } from "./staging-promotion.ts";
 import { readTarget, validateTarget } from "./wrangler-target.ts";
 
@@ -110,9 +110,9 @@ test("token scope: the diagnostic for the observed body is structural only", asy
   assert.deepEqual(info, {
     status: 403, mediaType: "application/json", cfMitigated: false, wwwAuthenticate: false,
     fields: ["success", "errors", "messages", "result"], otherFields: 0, success: false,
-    errors: { count: 0, codes: [], nonObjectEntries: 0, withMessage: 0, withDocumentationUrl: 0 },
-    messages: { count: 0, codes: [], nonObjectEntries: 0, withMessage: 0, withDocumentationUrl: 0 },
-    result: null,
+    errors: { count: 0, codes: [], nonObjectEntries: 0, withMessage: 0, withDocumentationUrl: 0, withOtherKeys: 0 },
+    messages: { count: 0, codes: [], nonObjectEntries: 0, withMessage: 0, withDocumentationUrl: 0, withOtherKeys: 0 },
+    result: null, codelessDenialShape: false,
   });
 });
 
@@ -154,7 +154,7 @@ test("token scope: the planted body reports only counts, numeric codes, and pres
   const r = await scope(cfStub(ownOk, () => plantedJson(403)));
   const info = JSON.parse(r.lines.at(-2)!.replace(/^INFO response: /, ""));
   assert.equal(info.success, "not-a-boolean");
-  assert.deepEqual(info.errors, { count: 3, codes: [1234], nonObjectEntries: 1, withMessage: 1, withDocumentationUrl: 1 });
+  assert.deepEqual(info.errors, { count: 3, codes: [1234], nonObjectEntries: 1, withMessage: 1, withDocumentationUrl: 1, withOtherKeys: 0 });
   assert.equal(info.otherFields, 1);
   assert.equal(info.result, "object");
 });
@@ -183,6 +183,173 @@ test("token scope: an own-Worker failure is logged, a success on the denied Work
   const leak = await scope(cfStub(ownOk, () => json(200, { success: true, result: { name: "ninjatronics-v2-production", setting: "worker-setting-value" } })));
   assert.match(leak.lines.at(-1)!, /CAN reach/);
   assert.ok(!leak.lines.join("\n").includes("INFO"), "no Worker details are logged");
+});
+
+// ---- token-scope: verified code-less 403 denial --------------------------------
+// Staging run 42523071768 (encrypted capture, decrypted by the maintainer):
+// the staging token on ninjatronics-v2-production gets HTTP 403 with
+// {success:false, errors:[{message:"No access to the specified resource."}],
+// messages:[], result:null}. Accepted ONLY in that exact form and direction.
+
+const VERIFIED = "No access to the specified resource.";
+const observed = (message: unknown = VERIFIED, over: Record<string, unknown> = {}, headers: Record<string, string> = {}) => () =>
+  new Response(JSON.stringify({ success: false, errors: [{ message }], messages: [], result: null, ...over }),
+    { status: 403, headers: { "content-type": "application/json", ...headers } });
+const STAGING_PAIR = { allowed: "ninjatronics-v2", denied: "ninjatronics-v2-production" };
+
+test("code-less denial: exactly one verified entry, for the staging check only, frozen", () => {
+  assert.deepEqual(CODELESS_DENIALS.map((d) => ({ ...d })), [{ ...STAGING_PAIR, message: VERIFIED }]);
+  assert.ok(Object.isFrozen(CODELESS_DENIALS) && Object.isFrozen(CODELESS_DENIALS[0]));
+});
+
+test("code-less denial: the observed staging response passes", async () => {
+  const r = await scope(cfStub(ownOk, observed()));
+  assert.equal(r.ok, true, r.lines.join("\n"));
+  assert.match(r.lines.at(-1)!, /^OK   ninjatronics-v2-production: explicitly denied \(HTTP 403, verified code-less denial message\)$/);
+  assert.match(r.lines.at(-2)!, /"codelessDenialShape":true,"messageAllowlisted":true/);
+  assert.ok(!r.lines.some((l) => l.startsWith("INFO capture")), "an accepted denial is never captured");
+  assert.ok(!r.lines.join("\n").includes(VERIFIED), "the message itself is never printed");
+});
+
+test("code-less denial: the documented code 10000 denial still passes unchanged", async () => {
+  const r = await scope(cfStub(ownOk, denied));
+  assert.equal(r.ok, true, r.lines.join("\n"));
+  assert.match(r.lines.at(-1)!, /explicitly denied \(HTTP 403, code \[10000\]\)/);
+  const withMsg = await scope(cfStub(ownOk, () => json(403, { success: false, errors: [{ code: 10000, message: VERIFIED }], messages: [], result: null })));
+  assert.equal(withMsg.ok, true, "code 10000 with any message is the unchanged documented path");
+});
+
+// Production check (reverse direction): the production token, own Worker
+// ninjatronics-v2-production, denied on ninjatronics-v2.
+const prodStub = (other: Route): typeof fetch => (async (input: RequestInfo | URL) => {
+  const url = String(input);
+  if (url.endsWith("/workers/workers/ninjatronics-v2-production")) return json(200, { success: true, result: { name: "ninjatronics-v2-production" }, errors: [] });
+  if (url.endsWith("/workers/workers/ninjatronics-v2")) return other(url);
+  throw new Error(`unexpected URL ${url}`);
+}) as typeof fetch;
+const prodScope = (other: Route) => checkTokenScope({ fetch: prodStub(other), account: ACCOUNT, token: TOKEN,
+  allowed: "ninjatronics-v2-production", denied: "ninjatronics-v2", timeoutMs: 200 });
+
+test("code-less denial: NOT accepted for the production check (reverse direction, unverified)", async () => {
+  const r = await prodScope(observed());
+  assert.equal(r.ok, false);
+  assert.match(r.lines.at(-1)!, /not a verified denial message for this check/);
+  assert.ok(!r.lines.some((l) => l.startsWith("INFO capture")), "the production check never captures");
+});
+
+test("code-less denial: the production check still passes with code 10000", async () => {
+  const r = await prodScope(denied);
+  assert.equal(r.ok, true, r.lines.join("\n"));
+});
+
+test("code-less denial: NOT accepted for any other Worker pair", async () => {
+  const other = { fetch: (async (u: RequestInfo | URL) => String(u).endsWith("/a-worker")
+    ? json(200, { success: true, result: { name: "a-worker" }, errors: [] }) : observed()()) as typeof fetch };
+  const r = await checkTokenScope({ ...other, account: ACCOUNT, token: TOKEN, allowed: "a-worker", denied: "ninjatronics-v2-production", timeoutMs: 200 });
+  assert.equal(r.ok, false);
+  const body = { success: false, errors: [{ message: VERIFIED }], messages: [], result: null };
+  const facts = { mediaType: "application/json", cfMitigated: false, wwwAuthenticate: false };
+  assert.equal(isCodelessDenial({ status: 403, body, facts }, { allowed: "ninjatronics-v2", denied: "other" }), false);
+});
+
+for (const [label, message] of [
+  ["no trailing period", "No access to the specified resource"],
+  ["lowercase", "no access to the specified resource."],
+  ["uppercase", VERIFIED.toUpperCase()],
+  ["a leading space", ` ${VERIFIED}`],
+  ["a trailing space", `${VERIFIED} `],
+  ["a trailing newline", `${VERIFIED}\n`],
+  ["a double space", "No access to the  specified resource."],
+  ["a non-breaking space", "No access to the\u00a0specified resource."],
+  ["a Cyrillic look-alike letter", "No \u0430ccess to the specified resource."],
+  ["a zero-width space", "No access to the\u200b specified resource."],
+  ["extra words", `${VERIFIED} Contact your administrator.`],
+  ["a prefix only", "No access"],
+  ["a different resource", "No access to the specified account."],
+  ["Forbidden", "Forbidden"],
+  ["Authentication error", "Authentication error"],
+  ["an empty string", ""],
+  ["a non-string message", ["No access to the specified resource."]],
+  ["a null message", null],
+] as [string, unknown][]) {
+  test(`code-less denial: rejects a similar message (${label})`, async () => {
+    const r = await scope(cfStub(ownOk, observed(message)));
+    assert.equal(r.ok, false, r.lines.join("\n"));
+    assert.match(r.lines.at(-1)!, /^FAIL /);
+  });
+}
+
+for (const [label, other] of [
+  ["a code field alongside the message", () => json(403, { success: false, errors: [{ code: 9999, message: VERIFIED }], messages: [], result: null })],
+  ["a null code field", () => json(403, { success: false, errors: [{ code: null, message: VERIFIED }], messages: [], result: null })],
+  ["a documentation_url on the error", () => json(403, { success: false, errors: [{ message: VERIFIED, documentation_url: "https://x" }], messages: [], result: null })],
+  ["an extra field on the error", () => json(403, { success: false, errors: [{ message: VERIFIED, detail: "x" }], messages: [], result: null })],
+  ["a source field on the error", () => json(403, { success: false, errors: [{ message: VERIFIED, source: { pointer: "/" } }], messages: [], result: null })],
+  ["two errors", () => json(403, { success: false, errors: [{ message: VERIFIED }, { message: VERIFIED }], messages: [], result: null })],
+  ["zero errors", () => json(403, { success: false, errors: [], messages: [], result: null })],
+  ["a string error entry", () => json(403, { success: false, errors: [VERIFIED], messages: [], result: null })],
+  ["errors not an array", () => json(403, { success: false, errors: { message: VERIFIED }, messages: [], result: null })],
+  ["errors missing", () => json(403, { success: false, messages: [], result: null })],
+  ["a non-empty messages array", observed(VERIFIED, { messages: [{ message: "x" }] })],
+  ["messages not an array", observed(VERIFIED, { messages: {} })],
+  ["messages missing", () => json(403, { success: false, errors: [{ message: VERIFIED }], result: null })],
+  ["result not null", observed(VERIFIED, { result: {} })],
+  ["result an empty array", observed(VERIFIED, { result: [] })],
+  ["result missing", () => json(403, { success: false, errors: [{ message: VERIFIED }], messages: [] })],
+  ["success true", observed(VERIFIED, { success: true })],
+  ["success as a string", observed(VERIFIED, { success: "false" })],
+  ["success missing", () => json(403, { errors: [{ message: VERIFIED }], messages: [], result: null })],
+  ["an unexpected top-level field", observed(VERIFIED, { extra: 1 })],
+  ["a result_info field", observed(VERIFIED, { result_info: {} })],
+  ["a firewall challenge header", observed(VERIFIED, {}, { "cf-mitigated": "challenge" })],
+  ["a www-authenticate header", observed(VERIFIED, {}, { "www-authenticate": "Bearer" })],
+  ["a non-JSON media type", observed(VERIFIED, {}, { "content-type": "text/plain" })],
+  ["a missing media type", () => new Response(JSON.stringify({ success: false, errors: [{ message: VERIFIED }], messages: [], result: null }), { status: 403 })],
+  ["HTML (firewall page)", () => new Response(`<html>${VERIFIED}</html>`, { status: 403, headers: { "content-type": "text/html", "cf-mitigated": "challenge" } })],
+  ["malformed JSON", () => new Response(`{"success":false,"errors":[{"message":"${VERIFIED}"}]`, { status: 403, headers: { "content-type": "application/json" } })],
+  ["an empty body", () => new Response("", { status: 403, headers: { "content-type": "application/json" } })],
+  ["a JSON array body", () => json(403, [{ message: VERIFIED }])],
+  ["a JSON null body", () => json(403, null)],
+] as [string, Route][]) {
+  test(`code-less denial: rejected on ${label}`, async () => {
+    const r = await scope(cfStub(ownOk, other));
+    assert.equal(r.ok, false, r.lines.join("\n"));
+    assert.match(r.lines.at(-1)!, /^FAIL /);
+  });
+}
+
+for (const [label, status] of [
+  ["401 authentication failure", 401], ["400 authentication failure", 400], ["404", 404], ["429", 429], ["500", 500], ["502", 502], ["503", 503], ["302", 302],
+] as [string, number][]) {
+  test(`code-less denial: the verified body is rejected with HTTP ${label}`, async () => {
+    const r = await scope(cfStub(ownOk, () => json(status, { success: false, errors: [{ message: VERIFIED }], messages: [], result: null })));
+    assert.equal(r.ok, false);
+    assert.match(r.lines.at(-1)!, new RegExp(`expected HTTP 403, got ${status}`));
+  });
+}
+
+test("code-less denial: the token's own Worker must still return 200 first", async () => {
+  const r = await scope(cfStub(() => json(403, { success: false, errors: [{ message: VERIFIED }], messages: [], result: null }), observed()));
+  assert.equal(r.ok, false);
+  assert.match(r.lines.at(-1)!, /can't read its own Worker/);
+});
+
+test("code-less denial: shape and match helpers agree with the guard; missing facts fail closed", () => {
+  const facts = { mediaType: "application/json", cfMitigated: false, wwwAuthenticate: false };
+  const body = { success: false, errors: [{ message: VERIFIED }], messages: [], result: null };
+  assert.equal(hasCodelessDenialShape({ status: 403, body, facts }), true);
+  assert.equal(isCodelessDenial({ status: 403, body, facts }, STAGING_PAIR), true);
+  assert.equal(isCodelessDenial({ status: 403, body, facts }, undefined), false);
+  assert.equal(isCodelessDenial({ status: 403, body, facts }, STAGING_PAIR, []), false, "empty allowlist accepts nothing");
+  assert.equal(hasCodelessDenialShape({ status: 403, body, facts: undefined }), false);
+});
+
+test("code-less denial: no message text, token, or account ID reaches the output", async () => {
+  for (const other of [observed(), observed(`${VERIFIED} ${TOKEN} ${ACCOUNT} SECRET-MESSAGE-TEXT`)]) {
+    const r = await scope(cfStub(ownOk, other));
+    const out = r.lines.join("\n");
+    for (const p of [TOKEN, ACCOUNT, "SECRET-MESSAGE-TEXT", "No access"]) assert.ok(!out.includes(p), `leaked "${p}":\n${out}`);
+  }
 });
 
 // ---- staging-promotion ------------------------------------------------------
