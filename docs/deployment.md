@@ -322,6 +322,49 @@ Setup, verification, and the implementation order are in the runbook §9.
 
 ---
 
+### 3.5 Production token diagnostic (temporary)
+
+`.github/workflows/diagnose-production-token.yml` checks the production
+token's isolation **without deploying anything**. It runs the same two
+read-only Cloudflare calls as the production workflow's token step
+(`scripts/release/token-scope.ts`): the production Worker must answer 200,
+and `ninjatronics-v2` must deny the token.
+
+- Run it from **Actions → Diagnose production token → Run workflow**
+  (branch `main`, typing `diagnose-production-token`), then approve the
+  `production` environment.
+- It uses `deployment: false`, so no deployment record is created, and it
+  shares the `deploy-production` concurrency group.
+- Only the token-check step receives the production secrets. There is no
+  build, no Wrangler, and no write request.
+- If Cloudflare's denial is not the documented code 10000, the guard
+  rejects it as usual. The response's error entries are then logged only as
+  age-encrypted ciphertext (`scripts/release/denial-capture.ts`), which the
+  maintainer decrypts locally. A verified code-less message is added to
+  `CODELESS_DENIALS` for this direction in a separate, reviewed PR.
+
+**Cleanup, once both directions are verified** (one PR):
+1. Delete `.github/workflows/diagnose-production-token.yml` and this section.
+2. Delete `scripts/release/denial-capture.ts`,
+   `scripts/release/denial-capture.test.ts`, and
+   `scripts/release/diagnostic-recipient.txt`. Remove the capture call, its
+   import, and the `capture` option from `scripts/release/token-scope.ts`.
+3. Remove `age-encryption` from `devDependencies` (`npm uninstall
+   age-encryption`). Drop the diagnostic workflow's checks from
+   `scripts/release/workflows.test.ts`, and keep the checks that cover the
+   remaining workflows.
+4. Keep `CODELESS_DENIALS` and its tests. Those entries are the verified
+   rules, not diagnostics.
+5. Validate (`npm run check`, `npm test`, `npm run build`), merge, and
+   confirm in the Actions tab that "Diagnose production token" no longer
+   appears.
+6. The maintainer shreds the age private key and any saved `.age` captures.
+   Optionally, delete the diagnostic run logs; they contain only ciphertext.
+
+Immediate stop, if ever needed: `gh workflow disable
+diagnose-production-token.yml`. This is a repository setting, so get approval
+first.
+
 ## 4. Never touched by this project
 
 - The legacy Worker `ninjatronics`: code, settings, Git connection, versions.

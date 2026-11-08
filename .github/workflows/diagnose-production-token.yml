@@ -1,0 +1,81 @@
+# TEMPORARY read-only diagnostic: checks the PRODUCTION Cloudflare token's
+# isolation without deploying anything. Remove after verification (cleanup:
+# docs/deployment.md, "Production token diagnostic").
+#
+# What it does: the same two read-only Cloudflare API calls as the
+# "Verify the production token ..." step of deploy-production.yml
+# (scripts/release/token-scope.ts): GET the production Worker (must be 200)
+# and GET the staging Worker (must be an explicit denial). If Cloudflare's
+# denial is rejected by the guard, its error entries are logged only as
+# age-encrypted ciphertext (scripts/release/denial-capture.ts).
+#
+# What it never does: build, run Wrangler, deploy, call a Cloudflare write
+# endpoint, or change any configuration. The token-isolation rules are those
+# of token-scope.ts, unchanged.
+#
+# Safeguards:
+#   - manual dispatch only, from main only, with a typed confirmation;
+#   - "production" environment: its required reviewer must approve, admins
+#     can't bypass, and its branch policy accepts main only.
+#     deployment: false = no GitHub deployment record is created (the
+#     production environment's deployment history stays empty);
+#   - same concurrency group as deploy-production.yml, so the two never
+#     overlap;
+#   - contents: read only; no other token permissions;
+#   - the production secrets exist only in the token-check step, never
+#     during checkout or dependency installation (which also skips install
+#     scripts: token-scope.ts needs none);
+#   - actions pinned to full commit SHAs; no npm cache in this job.
+name: Diagnose production token
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type diagnose-production-token to confirm (read-only; nothing is deployed)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    name: Diagnose production token isolation (read-only)
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm == 'diagnose-production-token'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: production
+      deployment: false
+    env:
+      EXPECTED_WORKER: ninjatronics-v2-production
+    steps:
+      - name: Check out
+        timeout-minutes: 3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js (version from .nvmrc)
+        timeout-minutes: 5
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      # No Cloudflare credentials exist in the environment for this step.
+      - name: Install dependencies (no install scripts)
+        timeout-minutes: 5
+        run: npm ci --ignore-scripts
+
+      # The only step with the production credentials. Read-only GETs.
+      - name: Check the production token is scoped to ninjatronics-v2-production only
+        timeout-minutes: 2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/release/token-scope.ts --allowed "$EXPECTED_WORKER" --denied ninjatronics-v2
