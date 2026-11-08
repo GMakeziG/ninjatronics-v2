@@ -72,6 +72,119 @@ test("token scope: rejects bad inputs before any request", async () => {
   assert.match((await scope(never, { denied: "ninjatronics-v2" })).lines[0], /must be different/);
 });
 
+// ---- token-scope: the observed 403 and its diagnostics ----------------------
+// Run 42518058588 (2026-11-08): the staging token got HTTP 403 with success
+// false and no error codes on ninjatronics-v2-production. Until the full body
+// is known, that is NOT accepted as a denial; the guard must fail and log a
+// redacted summary of the response.
+
+const html = (status: number, headers: Record<string, string> = {}) =>
+  new Response("<html><body>blocked</body></html>", { status, headers: { "content-type": "text/html", ...headers } });
+
+for (const [label, other, reason] of [
+  ["403 with an empty errors array (observed 2026-11-08)", () => json(403, { success: false, errors: [], messages: [], result: null }), /without the expected denial/],
+  ["403 whose errors have no code", () => json(403, { success: false, errors: [{ message: "Forbidden" }] }), /without the expected denial/],
+  ["403 with code 10000 as a string", () => json(403, { success: false, errors: [{ code: "10000" }] }), /without the expected denial/],
+  ["403 with errors not an array", () => json(403, { success: false, errors: { code: 10000 } }), /without the expected denial/],
+  ["403 with null error entries", () => json(403, { success: false, errors: [null, 10000] }), /without the expected denial/],
+  ["403 without a success field", () => json(403, { errors: [{ code: 10000 }] }), /without the expected denial/],
+  ["403 with a JSON null body", () => json(403, null), /without the expected denial/],
+  ["403 HTML (WAF challenge)", () => html(403, { "cf-mitigated": "challenge" }), /non-JSON/],
+  ["400 authentication failure (9106)", () => json(400, { success: false, errors: [{ code: 9106, message: "Authentication failed (status: 400)" }] }), /expected HTTP 403, got 400/],
+  ["401 authentication failure (10001)", () => json(401, { success: false, errors: [{ code: 10001, message: "Unable to authenticate request" }] }), /expected HTTP 403, got 401 \(authentication failed/],
+  ["429 rate limit", () => json(429, { success: false, errors: [{ code: 10000, message: "rate limited" }] }), /expected HTTP 403, got 429/],
+  ["302 redirect", () => new Response(null, { status: 302, headers: { location: "https://example.com/" } }), /non-JSON|expected HTTP 403, got 302/],
+  ["an empty 403 body", () => new Response("", { status: 403 }), /non-JSON/],
+] as [string, Route, RegExp][]) {
+  test(`token scope: fails on ${label}, with a diagnostic line`, async () => {
+    const r = await scope(cfStub(ownOk, other));
+    assert.equal(r.ok, false, r.lines.join("\n"));
+    assert.match(r.lines.at(-1)!, reason);
+    assert.match(r.lines.at(-2)!, /^INFO response: \{"status":\d+/);
+  });
+}
+
+test("token scope: the diagnostic for the observed body is structural only", async () => {
+  const r = await scope(cfStub(ownOk, () => json(403, { success: false, errors: [], messages: [], result: null })));
+  const info = JSON.parse(r.lines.at(-2)!.replace(/^INFO response: /, ""));
+  assert.deepEqual(info, {
+    status: 403, mediaType: "application/json", cfMitigated: false, wwwAuthenticate: false,
+    fields: ["success", "errors", "messages", "result"], otherFields: 0, success: false,
+    errors: { count: 0, codes: [], nonObjectEntries: 0, withMessage: 0, withDocumentationUrl: 0 },
+    messages: { count: 0, codes: [], nonObjectEntries: 0, withMessage: 0, withDocumentationUrl: 0 },
+    result: null,
+  });
+});
+
+// Sensitive values planted everywhere a response can carry text.
+const PLANTED = [TOKEN, ACCOUNT, "f".repeat(32), "SECRET-MESSAGE-TEXT", "https://leak.example/doc",
+  "secret-field-name", "worker-setting-value", "planted-header-value", "SECRET-HTML-BODY", "SECRET-CODE-STRING"];
+const plantedJson = (status: number) => json(status, {
+  success: "SECRET-CODE-STRING",
+  errors: [{ code: 1234, message: `SECRET-MESSAGE-TEXT ${TOKEN} ${ACCOUNT}`, documentation_url: "https://leak.example/doc" }, { code: "SECRET-CODE-STRING" }, "SECRET-MESSAGE-TEXT"],
+  messages: [{ code: 1, message: TOKEN }],
+  result: { id: "f".repeat(32), name: "ninjatronics-v2-production", setting: "worker-setting-value" },
+  "secret-field-name": "worker-setting-value",
+});
+const plantedHeaders = { "cf-mitigated": "planted-header-value", "www-authenticate": `Bearer realm="planted-header-value"`, server: "planted-header-value", "set-cookie": "planted-header-value" };
+
+for (const [label, other] of [
+  ["a 403 JSON body", () => plantedJson(403)],
+  ["a 401 JSON body", () => plantedJson(401)],
+  ["a 500 JSON body", () => plantedJson(500)],
+  ["a 403 HTML body", () => new Response(`<html>SECRET-HTML-BODY ${TOKEN} ${ACCOUNT}</html>`, { status: 403, headers: { "content-type": "text/html; planted-header-value", ...plantedHeaders } })],
+  ["a 403 JSON body with odd headers", () => new Response(JSON.stringify({ success: false, errors: [{ code: 10000, message: "SECRET-MESSAGE-TEXT" }] }), { status: 403, headers: { "content-type": "application/planted-header-value", ...plantedHeaders } })],
+] as [string, Route][]) {
+  test(`token scope: no sensitive value from ${label} reaches the output`, async () => {
+    const r = await scope(cfStub(ownOk, other));
+    const out = r.lines.join("\n");
+    assert.match(out, /INFO response: /);
+    for (const p of PLANTED) assert.ok(!out.includes(p), `leaked "${p}":\n${out}`);
+  });
+}
+
+test("token scope: a network error prints its type, not its message", async () => {
+  const r = await scope(cfStub(ownOk, () => { throw new TypeError(`fetch failed for /accounts/${ACCOUNT}/ with ${TOKEN}`); }));
+  const out = r.lines.join("\n");
+  assert.match(r.lines.at(-1)!, /request failed \(TypeError\)/);
+  assert.ok(!out.includes(ACCOUNT) && !out.includes(TOKEN), out);
+});
+
+test("token scope: the planted body reports only counts, numeric codes, and presence flags", async () => {
+  const r = await scope(cfStub(ownOk, () => plantedJson(403)));
+  const info = JSON.parse(r.lines.at(-2)!.replace(/^INFO response: /, ""));
+  assert.equal(info.success, "not-a-boolean");
+  assert.deepEqual(info.errors, { count: 3, codes: [1234], nonObjectEntries: 1, withMessage: 1, withDocumentationUrl: 1 });
+  assert.equal(info.otherFields, 1);
+  assert.equal(info.result, "object");
+});
+
+test("token scope: only allow-listed media types and header presence are reported", async () => {
+  const r = await scope(cfStub(ownOk, () => new Response("<html></html>", { status: 403, headers: { "content-type": "text/html; charset=utf-8", "cf-mitigated": "challenge" } })));
+  const info = JSON.parse(r.lines.at(-2)!.replace(/^INFO response: /, ""));
+  assert.equal(info.mediaType, "text/html");
+  assert.equal(info.cfMitigated, true);
+  assert.equal(info.wwwAuthenticate, false);
+  const odd = await scope(cfStub(ownOk, () => new Response("{}", { status: 403, headers: { "content-type": "application/x-odd" } })));
+  assert.equal(JSON.parse(odd.lines.at(-2)!.replace(/^INFO response: /, "")).mediaType, "other");
+});
+
+test("token scope: the accepted denial is logged too, unchanged rules", async () => {
+  const r = await scope(cfStub(ownOk, () => json(403, { success: false, errors: [{ code: 10000, message: "Forbidden", documentation_url: "https://developers.cloudflare.com/api/" }], messages: [], result: null })));
+  assert.equal(r.ok, true, r.lines.join("\n"));
+  const out = r.lines.join("\n");
+  assert.match(out, /INFO response: .*"codes":\[10000\],"nonObjectEntries":0,"withMessage":1,"withDocumentationUrl":1/);
+  assert.ok(!out.includes("Forbidden") && !out.includes("developers.cloudflare.com"), "no message text or URL");
+});
+
+test("token scope: an own-Worker failure is logged, a success on the denied Worker is not", async () => {
+  const own = await scope(cfStub(() => json(401, { success: false, errors: [{ code: 10001 }] }), denied));
+  assert.match(own.lines.at(-2)!, /^INFO response: \{"status":401/);
+  const leak = await scope(cfStub(ownOk, () => json(200, { success: true, result: { name: "ninjatronics-v2-production", setting: "worker-setting-value" } })));
+  assert.match(leak.lines.at(-1)!, /CAN reach/);
+  assert.ok(!leak.lines.join("\n").includes("INFO"), "no Worker details are logged");
+});
+
 // ---- staging-promotion ------------------------------------------------------
 
 const REPO = "GMakeziG/ninjatronics-v2";
