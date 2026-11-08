@@ -1,0 +1,164 @@
+# Manual production deployment of the Cloudflare Worker
+# "ninjatronics-v2-production". See docs/production-cutover-runbook.md §9.
+#
+# Separate from staging in every respect: its own Worker, Wrangler config
+# (wrangler.production.jsonc), GitHub environment ("production"), and
+# Cloudflare token (Workers Editor on ninjatronics-v2-production only). The
+# staging workflow and token can't reach this Worker, and this token can't
+# reach staging.
+#
+# Never runs on push or pull_request: only by hand, only from main, only after
+# the "production" environment's required reviewer approves (admins can't
+# bypass; the environment accepts only main), and only for a commit that the
+# approved staging workflow already deployed and verified (promotion gate,
+# scripts/release/staging-promotion.ts).
+#
+# Before any upload, the job also proves its token is valid for this Worker
+# and explicitly denied on staging (scripts/release/token-scope.ts).
+#
+# No automatic rollback: a failed check fails the run and prints the manual
+# rollback steps (runbook §8.2) for a person to decide.
+#
+# Timeout budget: step timeouts add up to 58, below the 60-minute job timeout.
+# Requires `npm run smoke` (scripts/release/smoke-http.ts, PR #13).
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_worker:
+        description: Type the target Worker name (ninjatronics-v2-production) to confirm
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read # promotion gate: "Deploy staging" runs and their steps
+  deployments: read # promotion gate: the approved "staging" deployment
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ninjatronics-v2-production
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_worker == 'ninjatronics-v2-production'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: production
+    env:
+      EXPECTED_WORKER: ninjatronics-v2-production
+      WRANGLER_CONFIG: wrangler.production.jsonc
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - name: Check out
+        timeout-minutes: 3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js (version from .nvmrc)
+        timeout-minutes: 5
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Promotion gate, before any build or credential: an approved, verified
+      # "Deploy staging" run of this exact commit must exist.
+      - name: Promotion gate (approved staging run verified this commit)
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release/staging-promotion.ts
+
+      # No Cloudflare credentials exist in the environment for these steps.
+      - name: Install dependencies
+        timeout-minutes: 8
+        run: npm ci
+
+      - name: Type-check, test, build, and verify the build
+        timeout-minutes: 10
+        run: |
+          npm run check
+          npm test
+          npm run build
+          npm run verify:dist
+
+      - name: Validate deployment target
+        timeout-minutes: 2
+        run: node scripts/release/wrangler-target.ts --config "$WRANGLER_CONFIG" --name "$EXPECTED_WORKER" --workers-dev false
+
+      - name: Dry run (validates the Worker bundle; uploads nothing)
+        timeout-minutes: 3
+        run: npx wrangler deploy --dry-run --config "$WRANGLER_CONFIG"
+
+      # Credentials exist only in the Cloudflare steps below.
+      - name: Verify the production token is scoped to ninjatronics-v2-production only
+        timeout-minutes: 2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/release/token-scope.ts --allowed "$EXPECTED_WORKER" --denied ninjatronics-v2
+
+      - name: Deploy to ninjatronics-v2-production
+        id: deploy
+        timeout-minutes: 10
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config "$WRANGLER_CONFIG" 2>&1 | tee deploy.log
+
+      - name: Verify Worker settings (workers.dev off, preview URLs off)
+        id: settings
+        if: ${{ always() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure') }}
+        timeout-minutes: 3
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'EOF2'
+          const { CLOUDFLARE_API_TOKEN: token, CLOUDFLARE_ACCOUNT_ID: account, EXPECTED_WORKER: worker } = process.env;
+          const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/workers/workers/${worker}`,
+            { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
+          const body = await res.json().catch(() => ({}));
+          const errors = [];
+          if (!res.ok || !body.success) errors.push(`Worker settings lookup failed: HTTP ${res.status} ${JSON.stringify(body.errors ?? [])}`);
+          else {
+            const w = body.result ?? {};
+            if (w.name !== worker) errors.push(`API returned Worker "${w.name}", expected "${worker}"`);
+            if (w.subdomain?.enabled !== false) errors.push(`workers.dev enabled is ${w.subdomain?.enabled}, expected false`);
+            if (w.subdomain?.previews_enabled !== false) errors.push(`preview URLs enabled is ${w.subdomain?.previews_enabled}, expected false`);
+          }
+          for (const e of errors) console.log(`::error::${e}`);
+          if (errors.length) process.exit(1);
+          console.log(`OK: Worker "${worker}": workers.dev disabled, preview URLs disabled`);
+          EOF2
+
+      # Public smoke test, only once the production URL exists (the
+      # environment variable PRODUCTION_URL is set at cutover, runbook §9.5 G3).
+      - name: Smoke test production
+        id: smoke
+        if: ${{ steps.deploy.outcome == 'success' && vars.PRODUCTION_URL != '' }}
+        timeout-minutes: 8
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+        run: npm run smoke -- "$PRODUCTION_URL" --dist dist
+
+      - name: Skip notice (no production URL yet)
+        timeout-minutes: 1
+        if: ${{ steps.deploy.outcome == 'success' && vars.PRODUCTION_URL == '' }}
+        run: echo "::notice::PRODUCTION_URL is not set (before cutover). Settings verified; content was verified on staging from the same commit."
+
+      - name: Rollback guidance
+        timeout-minutes: 1
+        if: ${{ failure() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure') }}
+        run: |
+          echo "::error::Production deployment could not be verified. Nothing was rolled back automatically."
+          echo "Decide now (runbook §8.1). To restore the previous version:"
+          echo "  Dashboard → Workers & Pages → ${EXPECTED_WORKER} → Deployments → roll back to the previous version."
+          echo "If the domain itself is wrong or down: runbook §8.3 (back to the legacy site)."
+          exit 1

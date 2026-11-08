@@ -17,7 +17,7 @@
 # A verified deployment is never contained.
 # See docs/deployment.md, "Containment and recovery".
 #
-# Timeout budget: every step has its own timeout-minutes. They add up to 51,
+# Timeout budget: every step has its own timeout-minutes. They add up to 53,
 # below the 60-minute job timeout, so a hung step fails on its own and the
 # verification and containment steps keep their time. The approval wait before
 # the job starts does not count toward the job timeout.
@@ -117,7 +117,21 @@ jobs:
 
       - name: Dry run (validates the Worker bundle; uploads nothing)
         timeout-minutes: 3
-        run: npx wrangler deploy --dry-run --name "$EXPECTED_WORKER"
+        run: npx wrangler deploy --dry-run --config wrangler.jsonc --name "$EXPECTED_WORKER"
+
+      # Token isolation (runbook §9.3). Runs before the deploy and fails it
+      # unless BOTH hold: this token can read ninjatronics-v2 (so it is valid),
+      # and Cloudflare explicitly denies it (HTTP 403, code 10000) on the
+      # production Worker. Network errors, 401, 404, 5xx, and any other
+      # response fail. See scripts/release/token-scope.ts.
+      # The step names in this job are checked by the production promotion
+      # gate (scripts/release/staging-promotion.ts): rename them together.
+      - name: Verify the staging token is scoped to ninjatronics-v2 only
+        timeout-minutes: 2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/release/token-scope.ts --allowed "$EXPECTED_WORKER" --denied ninjatronics-v2-production
 
       # Credentials exist only in the Cloudflare steps below.
       # The step timeout makes a hung Wrangler fail this step instead of
@@ -130,7 +144,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          npx wrangler deploy --name "$EXPECTED_WORKER" 2>&1 | tee deploy.log
+          npx wrangler deploy --config wrangler.jsonc --name "$EXPECTED_WORKER" 2>&1 | tee deploy.log
 
       # Authoritative check of the Worker's own settings through the
       # per-Worker API (accepts "Individual Workers Editor"). Failures are
