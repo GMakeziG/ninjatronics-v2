@@ -1,0 +1,26 @@
+// Cloudflare Worker for Ninjatronics v2 PRODUCTION: static assets only (no
+// Worker script, bindings, variables, or secrets). See docs/deployment.md and
+// docs/production-cutover-runbook.md §9.
+//
+// Deployed only by .github/workflows/deploy-production.yml, with a token
+// scoped to this Worker alone. Staging is a different Worker
+// ("ninjatronics-v2", wrangler.jsonc) with a different token.
+//
+// SAFETY: no "routes" and no custom domains. ninjatronics.io is attached by
+// hand, in the dashboard, only during an approved cutover; Wrangler leaves a
+// Custom Domain it isn't configured with untouched.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ninjatronics-v2-production",
+  // Keep in step with wrangler.jsonc: production runs what staging tested.
+  "compatibility_date": "2026-10-12",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  },
+  // Production is served only on its Custom Domain: no workers.dev URL and no
+  // Preview URLs. Every deploy applies these values.
+  "workers_dev": false,
+  "preview_urls": false
+}

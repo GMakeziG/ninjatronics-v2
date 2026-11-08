@@ -54,7 +54,7 @@ Cloudflare credentials.
 | `wrangler deploy` (4.153.0) with no `routes` in the config does **not** add, change, or remove Routes or Custom Domains | ✅ verified in source | `triggersDeploy`: routes and custom domains are published only when the config lists them |
 | Deploy token is Workers Editor scoped to `ninjatronics-v2` only | ❓ by design, not re-verified | Dashboard check D17 |
 | `GMakeziG/ninjatronics` has no GitHub Actions workflows, no webhooks, no deploy keys, Dependabot security updates off, one collaborator (owner, admin), default workflow token read-only, only the `main` branch | ✅ verified 2026-11-08 | GitHub API |
-| The production Worker `ninjatronics-v2-production`, its token, the `production` GitHub environment, and the production workflow | ❌ **don't exist yet** | Proposed in §9 |
+| The production Worker `ninjatronics-v2-production` (workers.dev and Version URLs off, no domains or routes, no Git), its single-Worker token, and the `production` GitHub environment (reviewer, no admin bypass, `main` only, two secrets) | ✅ created 2026-11-08 (§9.8 steps 1, 2, 4, 5) | Dashboard (owner) + GitHub API; production workers.dev returns 404 |
 
 **Consequence of the first three rows:** a push to `GMakeziG/ninjatronics`
 `main` deploys a new production version of the legacy Worker today, and
@@ -77,7 +77,7 @@ All must be true, in this order. Record each with a date and who approved it.
 | P6 | Script injectors off (D9–D12) and no rule rewrites HTML or headers for the apex (D13) | D9–D13 |
 | P7 | Activation timeout written down (maximum wait for the v2 Custom Domain to become Active), and the rollback decision owner named | Your approval |
 | P8 | Maintenance window chosen (low traffic) and you're available for the whole window plus 1 hour | — |
-| P10 | **Staging and production separated (§9):** Cloudflare changes C1–C3 and GitHub changes G1–G3 done, the production workflow merged, and the separation checks in §9.6 passed | §9.6 results recorded |
+| P10 | **Staging and production separated (§9):** checklist §9.8 steps 1–10 done (C1–C3, G1–G2, the R-changes merged, staging and production runs with both token-isolation checks passing) | §9.8 results recorded |
 | P11 | The production Worker runs the promoted commit: "Deploy production" succeeded for the same commit as P2, and its settings check shows workers.dev **off** and Preview URLs **off** | Production run log |
 | P9 | Explicit approval: "start cutover" (asked last, after P10 and P11) | — |
 
@@ -154,7 +154,7 @@ gh api -X POST repos/GMakeziG/ninjatronics/rulesets --input - <<'JSON'
   "conditions": { "ref_name": { "include": ["~ALL"], "exclude": [] } },
   "rules": [
     { "type": "creation" },
-    { "type": "update" },
+    { "type": "update", "parameters": { "update_allows_fetch_and_merge": false } },
     { "type": "deletion" },
     { "type": "non_fast_forward" }
   ]
@@ -177,6 +177,25 @@ gh api repos/GMakeziG/ninjatronics/commits/main --jq .sha                       
 ```
 Don't test it with a real push: if the rule were wrong, that push would
 deploy production.
+
+**Checked against GitHub's ruleset features (2026-11-08, read-only):**
+- Rulesets are available on this repository (a personal, public repository):
+  the rulesets, effective-rules, and rule-insights endpoints all answer (empty).
+  The same account's `ninjatronics-v2` repository already enforces an active
+  ruleset and records its evaluations, so enforcement works for this account.
+- All four rule types are valid branch-ruleset rules. The REST schema
+  requires `update` to carry `update_allows_fetch_and_merge`; it's set to
+  `false` (no syncing from an upstream either).
+- `"enforcement": "active"` is the only way to enforce it: the "evaluate"
+  (dry-run) mode isn't available here, so there is no safe rehearsal. The
+  read-only checks above are the verification.
+- With no bypass actors, the rules bind every pusher: you, the admin role,
+  GitHub Apps (Cloudflare's included), and deploy keys. A pull-request merge
+  is a push to `main`, so it's blocked too (confirm once in the UI after
+  applying: the merge button must show the ruleset).
+- Not covered: tags (Workers Builds builds branches, not tags), and an admin
+  editing or deleting the ruleset (the deliberate escape hatch; it appears in
+  the repository's audit trail).
 
 **Also, in the Cloudflare dashboard** (D3; read-only unless separately
 approved): record whether non-production branch builds are enabled, and
@@ -210,7 +229,7 @@ Record observed values, not expected ones. Screenshots help.
 - D5. Deployments: the active version came from the latest approved staging run.
 
 **Worker `ninjatronics-v2-production` (after C1, §9.4)**
-- D19. Domains & Routes: workers.dev **disabled**, Preview URLs **disabled**, no custom domains or routes (until cutover step 2). Not connected to Git (Settings → Build shows no repository).
+- D19. Domains & Routes: workers.dev **disabled**, Version URLs (formerly Preview URLs) **disabled**, no custom domains or routes (until cutover step 2). Not connected to Git (Settings → Builds offers Connect, shows no repository).
 - D20. Deployments: the active version came from the "Deploy production" run for the promoted commit (P11).
 
 **Zero Trust → Access**
@@ -458,8 +477,10 @@ design.
 
 ## 9. Deployment safety: staging and production stay separate
 
-**Status: proposal. Nothing in this section exists yet.** It's a cutover
-precondition (P10). Each Cloudflare (C) and GitHub (G) change needs its own
+**Status (2026-11-08):** architecture approved; the production Worker,
+its token, and the `production` environment exist (§9.8 steps 1, 2, 4,
+5). The repository changes (step 6) and everything after are pending. It's
+a cutover precondition (P10). Each Cloudflare (C) and GitHub (G) change needs its own
 approval; the repository changes (R) arrive by a separate pull request.
 
 ### 9.1 The problem
@@ -495,48 +516,158 @@ that already works.
 
 ### 9.3 Layers that keep staging away from production
 
-Each layer works on its own; together they need two independent failures.
+Each layer works on its own; getting past all of them takes several
+independent failures.
 
-1. **Cloudflare token scope (the hard boundary).** The staging token can
-   act only on `ninjatronics-v2`; the production token only on
-   `ninjatronics-v2-production`. Even a modified workflow or config can't
-   deploy to the other Worker with the wrong token. Neither token can change
-   DNS, routes, zone settings, or Access.
+1. **Cloudflare token scope (the hard boundary).** The staging token is
+   Workers Editor on `ninjatronics-v2` only; the production token on
+   `ninjatronics-v2-production` only. Neither has zone permissions, so
+   neither can add routes or Custom Domains: Cloudflare requires "Workers
+   Routes Write" on the zone for those, and Custom Domains don't accept
+   per-Worker roles at all.
 2. **GitHub environment secrets.** Each token is a secret of its own
-   environment. A job sees a secret only after that environment's reviewer
-   approves, and only on `main`. The `staging` job can't read the
-   `production` secret, and the reverse.
-3. **Workflow target checks.** Each workflow validates its config before any
-   credential is used: the exact Worker name, no routes or custom domains,
-   no environment sections, no bindings, and the expected workers.dev and
-   Preview URL settings.
-4. **Separation check in the staging workflow (R3).** Before deploying, the
-   staging job asks the Cloudflare API for `ninjatronics-v2-production`
-   using the staging token, and **fails if it succeeds**. A token that's
-   wrongly scoped is caught on every run, not only at setup.
-5. **Promotion gate (R2).** "Deploy production" refuses a commit unless a
-   "Deploy staging" run for the same commit SHA succeeded.
-6. **Branch protection.** Workflow files and Wrangler configs change only
-   through a pull request to protected `main`, and both environments accept
-   only `main`.
+   environment, released only after that environment's required reviewer
+   approves, and only to jobs running on `main`. There are no
+   repository-level Cloudflare secrets.
+3. **Token isolation test, in both workflows, before any upload**
+   (`scripts/release/token-scope.ts`). It passes only if **both** hold:
+   - the token can read its **own** Worker (HTTP 200, `success: true`,
+     matching name). This proves the token and account ID are valid, so a
+     denial in the next check can't be an invalid token in disguise;
+   - Cloudflare **explicitly denies** it on the other Worker: HTTP 403,
+     `success: false`, error code `10000` ("Forbidden").
+
+   Everything else fails the job: network errors, timeouts, non-JSON
+   bodies, 401, **404** (not found isn't a denial), 5xx, a 403 without code
+   10000, or any success on the other Worker. The token and account ID are
+   never printed.
+4. **Deployment-target validation** (`scripts/release/wrangler-target.ts`,
+   §9.7.4).
+5. **Promotion gate** (`scripts/release/staging-promotion.ts`, §9.7.3).
+   "Deploy production" refuses any commit that the approved staging
+   workflow didn't deploy and verify.
+6. **Branch protection.** Workflow files, the guard scripts, and the Wrangler
+   configs change only through a pull request to protected `main`; both
+   environments accept only `main`.
 
 ### 9.4 Cloudflare changes (dashboard; each needs approval)
 
 | # | Change | Notes |
 |---|---|---|
-| C1 | Create the Worker `ninjatronics-v2-production`: Workers & Pages → Create → Worker → "Hello World" → Deploy. Then Settings → Domains & Routes: **disable** workers.dev and Preview URLs | Don't import a repository or connect Git. The placeholder is public on workers.dev only until it's disabled, a minute or two |
-| C2 | Create an account-owned API token: Workers Editor scoped to `ninjatronics-v2-production` only, the same token type as staging (deployment.md §3.1), 90-day expiry | No zone, DNS, or Access permissions |
-| C3 | Re-check the staging token (D17): `ninjatronics-v2` only | If it covers more, replace it before G2 |
+| C1 | Create the Worker `ninjatronics-v2-production` and disable workers.dev and Version URLs (formerly Preview URLs). Procedure: §9.4.1 | Must come first: Cloudflare can't grant per-Worker access to a Worker that doesn't exist yet. Creating a Worker needs product-level Workers Admin (your dashboard user). Don't import a repository or connect Git. The placeholder is public on workers.dev only until it's disabled |
+| C2 | Create an account-owned API token: Workers Editor scoped to `ninjatronics-v2-production` only (the same token type as staging, deployment.md §3.1), 90-day expiry | No zone, DNS, Routes, or Access permissions |
+| C3 | Re-check the staging token (D17): `ninjatronics-v2` only | If it covers more, replace it before the R-changes merge |
 | C4 | **No** Access application for `ninjatronics.io` or the production Worker | Production is public by design; D6 confirms |
-| C5 | At cutover only (§5 step 2): Custom Domain `ninjatronics.io` on `ninjatronics-v2-production` | Already part of the cutover approval |
+| C5 | At cutover only (§5 step 2): Custom Domain `ninjatronics.io` on `ninjatronics-v2-production` | In the dashboard, by you. Part of the cutover approval |
 
 Nothing changes on the legacy Worker, DNS, mail, or the staging Worker's
 domains and Access application.
 
+#### 9.4.1 Stage 1 procedure: create the empty production Worker (C1)
+
+The dashboard renamed "Preview URLs" to **Version URLs**; the Wrangler field
+is still `preview_urls`. Disabling workers.dev does **not** disable Version
+URLs, so both are switched off separately.
+
+**Before you start (read-only):**
+- Workers & Pages lists no Worker named `ninjatronics-v2-production`.
+- You're signed in as a user with Workers Admin (creating a Worker needs
+  it).
+
+**Create (dashboard):**
+1. Workers & Pages → **Create application**.
+2. Choose the plain **Hello World** Worker (deployed straight from the
+   dashboard). Name it exactly `ninjatronics-v2-production`.
+3. **Stop point:** if the flow asks you to connect, import, or clone to
+   GitHub or GitLab, or to authorize the Cloudflare GitHub app, **cancel**.
+   Nothing has been created yet. Use the fallback below. Cloudflare's docs
+   say dashboard-started templates "are set up with Git", and the
+   Git-free path couldn't be confirmed without the dashboard. It existed
+   when `ninjatronics-v2` was created on 2026-11-02.
+4. **Deploy.** From here until step 6, a "Hello World" page is public at the
+   Worker's workers.dev address. It reveals nothing but the name, which is
+   already public in this repository.
+
+**Switch off public URLs, at once** (Worker → Settings → Domains & Routes):
+5. Confirm the list shows **no Custom Domain and no Route**.
+6. `workers.dev` → **Disable** → confirm.
+7. **Version URLs** → **Disable** → confirm.
+
+**Check that no Git connection exists** (Worker → Settings → Builds):
+8. It must offer **Connect** and show no repository. If a repository is
+   shown, select **Disconnect** and record it. Don't create any build
+   configuration.
+
+**Leave everything else empty.** The first workflow deploy replaces the
+script with static assets, and the config enforces the rest:
+- Settings → Variables and Secrets: none.
+- Bindings: none.
+- Triggers: no Cron Triggers.
+- No Tail Workers or Logpush.
+- No Access application.
+- Observability: leave the default.
+
+**Verify:**
+- In the dashboard (D19):
+  - Domains & Routes: workers.dev Disabled, Version URLs Disabled, no
+    domains or routes.
+  - Builds: not connected.
+  - Deployments: one dashboard version (Hello World).
+- From any terminal, using the account's workers.dev subdomain (private;
+  it's the same one staging uses):
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}\n' https://ninjatronics-v2-production.<subdomain>.workers.dev/   # 404 once disabled (allow a minute)
+  ```
+- Production is untouched: `curl -sI https://ninjatronics.io/ | grep -i etag`
+  still shows the legacy ETag.
+
+**Fallback if the dashboard requires Git.** Create the Worker with Wrangler
+from your own machine, so it never has a public URL:
+- Deploy a one-file static placeholder with `workers_dev: false` and
+  `preview_urls: false`.
+- Run `wrangler login` first and `wrangler logout` afterwards.
+- This needs your approval and the exact files and commands, which Claude
+  prepares on request.
+- Don't put Cloudflare credentials on the build host.
+
+**Undo:** Worker → Settings → **Delete**. This is safe only while nothing
+references the Worker (no token, no secret, no domain).
+
+#### 9.4.2 Stage 2 requirements: the production token (C2), not yet created
+
+| Field | Value |
+|---|---|
+| Where | Manage Account → **Account API Tokens** → Create Token → Custom token (account-owned, **not** a user token under My Profile) |
+| Name | `ninjatronics-v2-production deploy (GitHub Actions)` |
+| Permission | **One** policy: Workers → role **Editor** → scope **Specified Workers → `ninjatronics-v2-production`** |
+| Not granted | Any zone resource, Workers Routes, DNS, SSL, Access/Zero Trust, account-wide Workers Scripts, KV/R2/D1/Queues, Account Settings, API token permissions, billing, user permissions |
+| Expiry | 90 days from creation (record the date; rotation per deployment.md §3.2) |
+| IP filtering | None (GitHub-hosted runners have no fixed IPs) |
+| Handling | Shown once: paste it directly into the `production` environment secret (G2). Never into a file, chat, or the staging environment |
+| Who can create it | A user with API token provisioning rights or Super Administrator |
+
+Why this is enough, and no more:
+- **Same capabilities as staging:** the token type and role are the ones the
+  staging token uses for exactly the same operations: upload, deploy, set
+  workers.dev/Version URL state, and read Worker settings.
+- **No account-wide read:** Wrangler 4.153.0 looks up the account's
+  workers.dev subdomain only when workers.dev is enabled. Production
+  disables it, so the staging note about a possible account-wide "Workers
+  Scripts Read" doesn't apply.
+- **Can't attach a domain:** Custom Domains and Routes need zone "Workers
+  Routes Write", which the token doesn't have. Custom Domains don't accept
+  per-Worker roles at all.
+
+**Verify after creation (D21):** the token summary shows a single Workers
+Editor policy on `ninjatronics-v2-production`. The live proof comes later:
+the production workflow's token-isolation step (own Worker 200, staging
+403/10000).
+
 ### 9.5 GitHub changes (each needs approval)
 
-**G1. Create the `production` environment** with a required reviewer,
-admins not allowed to bypass, and deployments from `main` only:
+**G1. Create the `production` environment** with you as the required
+reviewer, admins not allowed to bypass, and deployments from `main` only
+(the same settings `staging` has today):
 
 ```bash
 R=GMakeziG/ninjatronics-v2
@@ -553,7 +684,8 @@ gh api -X POST repos/$R/environments/production/deployment-branch-policies -f na
 ```
 
 `prevent_self_review` stays `false` because you're the only reviewer; with
-`true`, nobody could approve a run you started.
+`true`, nobody could approve a run you started. Optional: add a wait timer
+(`"wait_timer": 5`, in minutes) as a pause before production.
 
 **G2. Production secrets**, entered interactively so they don't land in the
 shell history:
@@ -561,47 +693,145 @@ shell history:
 gh secret set CLOUDFLARE_API_TOKEN  --env production --repo $R   # the C2 token
 gh secret set CLOUDFLARE_ACCOUNT_ID --env production --repo $R
 ```
-Don't add repository-level Cloudflare secrets: they'd be visible to every
-job, both environments included.
 
 **G3. Production URL variable, set at cutover** (after §5 step 2 is Active):
 ```bash
 gh variable set PRODUCTION_URL --env production --repo $R --body https://ninjatronics.io
 ```
-While it's unset, "Deploy production" skips the public smoke test, because
-the production Worker has no public URL yet.
+While it's unset, "Deploy production" skips the public smoke test (the
+production Worker has no public URL yet).
 
 **Verify G1–G3** (read-only):
 ```bash
-gh api repos/$R/environments/production --jq '{reviewers: [.protection_rules[]?.reviewers[]?.reviewer.login], admins_bypass: .can_admins_bypass, policy: .deployment_branch_policy}'
+gh api repos/$R/environments/production --jq '{admins_bypass: .can_admins_bypass, rules: [.protection_rules[] | {type, reviewers: [.reviewers[]?.reviewer.login]}], policy: .deployment_branch_policy}'
+#   expect admins_bypass false, required_reviewers [GMakeziG], branch_policy, custom_branch_policies true
 gh api repos/$R/environments/production/deployment-branch-policies --jq '[.branch_policies[].name]'   # ["main"]
 gh secret list --env production --repo $R      # names only
-gh secret list --repo $R                       # no repository-level Cloudflare secrets
+gh secret list --repo $R                       # must list no Cloudflare secrets
 ```
 
-### 9.6 Repository changes (separate pull request, after approval)
+### 9.6 Repository changes (one pull request, after C1–C3)
 
 | # | File | Change |
 |---|---|---|
-| R1 | `wrangler.production.jsonc` (new) | Same assets settings as `wrangler.jsonc`; `name: "ninjatronics-v2-production"`, `workers_dev: false`, `preview_urls: false`, no routes, no custom domains, no `env` sections, no `account_id` |
-| R2 | `.github/workflows/deploy-production.yml` (new) | Manual dispatch from `main` only; type-to-confirm `ninjatronics-v2-production`; `environment: production`; `concurrency: deploy-production`. Build and verify **without credentials**, validate R1, then the **promotion gate** (a successful "Deploy staging" run for this SHA, through the GitHub API with `actions: read`), dry run, deploy with `--config wrangler.production.jsonc`, verify through the per-Worker API that workers.dev and Preview URLs are **off**, and if `PRODUCTION_URL` is set run `npm run smoke -- "$PRODUCTION_URL"`. **No automatic rollback or containment**: a failed check fails the run and prints the rollback steps (§8.2) for a person to decide |
-| R3 | `.github/workflows/deploy-staging.yml` | One new step before the deploy: with the staging token, GET `ninjatronics-v2-production` through the per-Worker API; fail the job if the response is a success. The existing exact-name check keeps staging on `ninjatronics-v2` |
-| R4 | `docs/deployment.md` | Describe both workflows, both tokens, token rotation for each |
+| R1 | `wrangler.production.jsonc` (new) | `name: "ninjatronics-v2-production"`, the same assets settings and compatibility date as staging, `workers_dev: false` and `preview_urls: false` **set explicitly**, no routes, no custom domains, no `env`, no `account_id` |
+| R2 | `.github/workflows/deploy-production.yml` (new) | See below |
+| R3 | `.github/workflows/deploy-staging.yml` | New step "Verify the staging token is scoped to ninjatronics-v2 only" before the deploy; `--config wrangler.jsonc` on the dry run and the deploy |
+| R4 | `scripts/release/token-scope.ts`, `staging-promotion.ts`, `wrangler-target.ts` (new) | The guards, used by the workflows |
+| R5 | `scripts/release/deploy-guards.test.ts` (new) | 30 tests with stubbed APIs, run by `npm test` in CI |
+| R6 | `docs/deployment.md` | Production deployments section |
 
-**Separation checks to run once, after C1–C3, G1–G2, and R1–R4** (record
-the results privately):
-1. "Deploy staging" passes, including R3. That proves the staging token
-   can't reach the production Worker.
-2. "Deploy production" for a commit **without** a successful staging run
-   fails at the promotion gate, before any credential is used.
-3. "Deploy production" for the commit staging just deployed passes; the
-   settings check reports workers.dev off and Preview URLs off (D19, D20).
-4. `curl -sI https://ninjatronics.io/ | grep -i etag` still shows the legacy
-   ETag: nothing so far touches production.
+**R2, "Deploy production"**, in order:
+1. Runs only for `workflow_dispatch` on `main`, with `ninjatronics-v2-production` typed to confirm, in environment `production`, with `concurrency: deploy-production`.
+2. Permissions are `contents: read`, `actions: read` and `deployments: read`.
+3. The promotion gate runs.
+4. With no credentials: `npm ci`, check, test, build, verify:dist, target validation, dry run.
+5. Then the token isolation test, the deploy with `--config wrangler.production.jsonc`, and the settings check (workers.dev **off**, Preview URLs **off**).
+6. Then `npm run smoke -- "$PRODUCTION_URL"` once that variable is set.
+7. **No automatic rollback:** a failure prints the §8 steps for you to decide.
 
-**To confirm when R3 first runs:** the exact status Cloudflare returns for a
-Worker outside the token's scope (403 or 404) hasn't been observed. R3
-therefore treats any non-success as the expected outcome and fails only on
-a success.
-R3 proves the separation only once C1 exists (before that, the lookup fails
-for every token), so check 1 counts only when run after C1.
+**Order matters:** merge only after C1–C3. Before the production Worker
+exists, the staging token-isolation step gets a 404 for it and (correctly)
+fails every staging deploy.
+
+### 9.7 Review results (2026-11-08, local and read-only)
+
+**9.7.1 Token isolation test.** Rewritten as described in §9.3 layer 3 and
+covered by 14 tests:
+- a pass;
+- a readable other Worker;
+- a 404, a 401, a 403 with the wrong code, a 403 with `success: true`, a 503;
+- a non-JSON body, a network error, a timeout;
+- an invalid token for its own Worker;
+- bad inputs.
+
+All fail closed except the pass. Cloudflare documents its denial as `403`
+with code `10000` "Forbidden". It doesn't document whether an out-of-scope
+**existing** Worker returns 403 or 404; the first live staging run after C1
+shows it. If it's 404, the test fails closed and the rule needs a decision.
+Don't loosen it silently.
+
+**9.7.2 Legacy ruleset.** See §2.4, "Checked against GitHub's ruleset
+features". One fix was needed: `update` requires
+`update_allows_fetch_and_merge`.
+
+**9.7.3 Promotion gate and approval.** The gate passes only if a "Deploy
+staging" run meets every one of these:
+- **Origin:** file `.github/workflows/deploy-staging.yml`, event
+  `workflow_dispatch`, branch `main`, this repository (not a fork), the
+  exact SHA, conclusion `success`.
+- **Steps:** the latest attempt's job "Deploy ninjatronics-v2 (staging)"
+  has target validation, token isolation, deploy, settings check, and
+  Access check all `success`, and containment `skipped`.
+- **Approval:** a `staging` deployment of that SHA has newest status
+  `success`, and its history includes `waiting`. GitHub records `waiting`
+  only when the required reviewer had to approve.
+
+Any API error fails it. 15 tests cover it, and it ran read-only against the
+real repository:
+- `a4ab296` (the last staged commit) is **refused**, because its run predates
+  the token-isolation step.
+- With that step excluded, the same run passes every other check, including
+  the approval evidence (`waiting → … → success`).
+- `3baafcf` (current `main`) is **refused**: it has never been staged.
+
+Production approval can't be bypassed from the repository:
+- Every job that uses `environment: production` waits for your approval.
+- Admins can't skip it (`can_admins_bypass: false`).
+- Branches other than `main` never receive its secrets.
+- No repository-level Cloudflare secrets exist.
+
+The remaining paths are all admin actions outside the workflow:
+- an admin removing the reviewer or editing the environment (logged);
+- someone holding the token deploying outside GitHub (rotate it every 90
+  days; revoke it if exposed);
+- a dashboard deploy by you.
+
+Because you're the only reviewer, approval is a deliberate pause rather
+than a second person's review.
+
+**To confirm on the first production run:** re-running a failed job asks
+for approval again.
+
+**9.7.4 Wrangler config can't publish routes, custom domains, workers.dev,
+or Preview URLs.** Verified in the Wrangler 4.153.0 source:
+- Routes and Custom Domains are published only from config `routes`/`route`
+  entries or the `--route`/`--domain` flags. The workflows pass neither, and
+  the validator rejects any routes key in the config.
+- With no routes, Wrangler **turns workers.dev on by default** unless
+  `workers_dev` is set. The validator therefore requires `workers_dev:
+  false` and `preview_urls: false` set explicitly, and every deploy applies
+  them.
+- An explicit `--config` disables Wrangler's `.wrangler/deploy/config.json`
+  redirect; the validator also fails if that file exists.
+- Env sections and cron triggers are rejected.
+- After deploying, the per-Worker API confirms workers.dev and Preview URLs
+  are off.
+
+Local results: target validation passes for both configs. It rejects the
+staging config as production, and every variant tested: custom domain,
+route string, `route` key, `workers_dev` true or missing, `preview_urls`
+true or missing, env section, cron, wrong name, `account_id`. Both dry runs
+pass.
+
+### 9.8 Implementation checklist
+
+Each line needs your approval when it runs. Stop at the first failure.
+
+| # | Who | Step | Done when |
+|---|---|---|---|
+| 1 ✅ | You, dashboard | **C1** Create `ninjatronics-v2-production` (Hello World); disable workers.dev and Preview URLs | D19 recorded |
+| 2 ✅ | You, dashboard | **C2** Production token: Workers Editor on that Worker only, 90 days | D21 recorded, expiry noted |
+| 3 | You, dashboard | **C3** Staging token covers `ninjatronics-v2` only | D17 recorded |
+| 4 ✅ | You or Claude, `gh` | **G1** `production` environment (reviewer, no admin bypass, `main` only) | §9.5 verify output matches |
+| 5 ✅ | You, `gh` (interactive) | **G2** Production secrets | `gh secret list --env production` shows both names; no repo-level CF secrets |
+| 6 | Claude | Open the R-changes PR (R1–R6); CI green; you review and merge | Merged |
+| 7 | You approve, Claude dispatches | **Deploy staging** for the merged commit | Token isolation step: own Worker 200, production **403 / 10000**; Access check OK; containment skipped |
+| 8 | Claude | Staging smoke through Access (§4) | `ALL SMOKE CHECKS PASSED` |
+| 9 | You approve, Claude dispatches | **Deploy production** for the same commit | Gate OK; isolation OK (own 200, staging 403); settings: workers.dev off, Preview URLs off; smoke skipped (no URL yet) |
+| 10 | Claude, read-only | Negative check: dispatch "Deploy production" on a commit **not** staged (only if one exists; otherwise skip) | Fails at the gate, before credentials |
+| 11 | You approve, Claude runs | Legacy freeze ruleset (§2.4) | `rules/branches/main` lists the four rules |
+| 12 | — | Cutover per §5 (attach to `ninjatronics-v2-production`), then **G3** | §6 passes |
+
+**To confirm on first live use:** the 403-vs-404 behavior (step 7), and
+that re-running the production job asks for approval again (step 9).

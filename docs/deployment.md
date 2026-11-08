@@ -9,19 +9,20 @@ afterwards as the rollback target.
 GitHub GMakeziG/ninjatronics-v2
    main ──(manual "Deploy staging" workflow + "staging" environment approval)──▶ Worker "ninjatronics-v2"
                                     (workers.dev, behind Cloudflare Access; never the production domain)
-   main ──(proposed: manual "Deploy production" + "production" approval,
+   main ──(manual "Deploy production" + "production" approval,
            only for a commit staging already deployed)──▶ Worker "ninjatronics-v2-production"
                                     (ninjatronics.io after cutover; see the runbook §9)
    other branches → never deployed (pull-request previews are deferred; see §3)
 ```
 
-Deployments run only from the manually dispatched GitHub Actions workflow
-`.github/workflows/deploy-staging.yml` (see §3.1). Pushing or merging never
+Deployments run only from the manually dispatched GitHub Actions workflows
+`.github/workflows/deploy-staging.yml` (§3.1) and
+`.github/workflows/deploy-production.yml` (§3.4). Pushing or merging never
 deploys. Cloudflare Workers Builds is **not** connected: it accepts only
 user tokens, which can't be limited to a single Worker.
 
-Nothing in this repository can attach a hostname: `wrangler.jsonc` has no
-`routes` and no custom domains. The production domain is moved by hand, in
+Nothing in this repository can attach a hostname: `wrangler.jsonc` and
+`wrangler.production.jsonc` have no `routes` and no custom domains. The production domain is moved by hand, in
 the dashboard, only during an approved cutover.
 
 ---
@@ -175,7 +176,11 @@ Manage Account → Account API Tokens → Create Token → Custom token:
 2. Validate the target: Worker name `ninjatronics-v2`, static assets only from
    `./dist`, `workers_dev: true`, `preview_urls: false`, no routes or custom
    domains, no bindings or runtime variables, no committed `account_id`.
-3. Dry run, then `wrangler deploy` (a failure fails the step).
+3. Dry run, then the **token-isolation check** (`scripts/release/token-scope.ts`:
+   the token must read `ninjatronics-v2` and be explicitly denied, HTTP 403,
+   on `ninjatronics-v2-production`; anything else stops the job before the
+   deploy), then `wrangler deploy --config wrangler.jsonc` (a failure fails
+   the step).
 4. Verify the Worker's settings through the per-Worker API: `workers.dev`
    enabled, preview URLs disabled.
 5. Verify anonymous requests are denied by Access (a redirect to
@@ -200,7 +205,7 @@ whose two verifications both pass is never contained.
 | Deploy step exceeds its 10-minute timeout | runs | runs unless both pass |
 | Run cancelled normally (one click) during or after the deploy | best effort: attempted, not guaranteed | best effort: attempted unless both pass; if either step didn't finish, verify manually (§3.3) |
 
-**Timeouts:** every step has its own `timeout-minutes`. They add up to 51,
+**Timeouts:** every step has its own `timeout-minutes`. They add up to 53,
 below the job's 60, so a hung step fails by itself and verification and
 containment keep their time. The approval wait doesn't count toward the job
 timeout.
@@ -211,9 +216,13 @@ Follow "Cancelled or interrupted runs" in §3.3.
 
 ### 3.2 Token rotation (every 90 days)
 
-1. Create a replacement token with the same single-Worker scope (§3.1).
-2. Replace the `CLOUDFLARE_API_TOKEN` environment secret.
-3. Dispatch the workflow once and confirm it passes.
+Staging and production each have their own token (§3.1, §3.4); rotate them
+separately.
+
+1. Create a replacement token with the same single-Worker scope.
+2. Replace the `CLOUDFLARE_API_TOKEN` secret of that environment only.
+3. Dispatch that environment's workflow once and confirm it passes,
+   including the token-isolation step.
 4. Revoke the old token (Manage Account → Account API Tokens).
 
 Revoke immediately, rather than at expiry, if the token may have been exposed.
@@ -282,6 +291,34 @@ Against the Access-protected URL (authenticate first):
 - `robots.txt`, `sitemap-index.xml`, `rss.xml`, canonical URLs, and
   `og:url` all use `https://ninjatronics.io`.
 - No draft content, and no `/brand-preview` (404).
+
+### 3.4 Production deployments (GitHub Actions)
+
+`.github/workflows/deploy-production.yml` deploys `main` to the production
+Worker `ninjatronics-v2-production` (config `wrangler.production.jsonc`:
+workers.dev and Preview URLs off; the `ninjatronics.io` Custom Domain is
+attached by hand at cutover). It is separate from staging in every respect:
+its own Worker, config, GitHub environment (`production`), and Cloudflare
+token (Workers Editor on `ninjatronics-v2-production` only).
+
+Run it from **Actions → Deploy production → Run workflow** (branch `main`,
+typing `ninjatronics-v2-production`), then approve the `production`
+environment. Before anything is uploaded, the job:
+1. passes the **promotion gate** (`scripts/release/staging-promotion.ts`):
+   the approved staging workflow deployed and verified this exact commit;
+2. builds and verifies the site with no credentials, and validates the
+   target (`scripts/release/wrangler-target.ts`);
+3. proves its token can read the production Worker and is explicitly denied
+   (403) on staging (`scripts/release/token-scope.ts`).
+
+After deploying it checks that workers.dev and Preview URLs are off and,
+once the `PRODUCTION_URL` environment variable is set at cutover, runs
+`npm run smoke` against it. There is no automatic rollback: a failed check
+fails the run, and you decide (runbook §8).
+
+The staging workflow runs the same token-isolation check in reverse, so a
+staging token that could reach production stops every staging deploy.
+Setup, verification, and the implementation order are in the runbook §9.
 
 ---
 
