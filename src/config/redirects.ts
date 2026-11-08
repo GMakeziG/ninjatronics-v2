@@ -59,4 +59,9 @@ export const STATIC_REDIRECTS: RedirectRule[] = [
   // redirects through its article's `legacyUrls` once it's published in v2.
   { from: "/about-me", to: "/about", note: "WordPress About Me page → About" },
   { from: "/feed", to: "/rss.xml", note: "WordPress RSS feed → RSS" },
+  // WordPress category archives listed in its sitemap (checked 2026-11-06).
+  // v2 has no matching categories, so they go to the blog index.
+  { from: "/category/blog", to: "/blog", note: "WordPress category archive → blog index" },
+  { from: "/category/blog/blog-blog", to: "/blog", note: "WordPress sub-category archive → blog index" },
+  { from: "/category/mindfulness", to: "/blog", note: "WordPress category archive → blog index" },
 ];

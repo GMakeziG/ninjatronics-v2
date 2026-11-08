@@ -16,6 +16,7 @@
     "import:check": "node scripts/obsidian/cli.ts --check",
     "test": "node --test \"scripts/**/*.test.ts\"",
     "verify:dist": "node scripts/release/verify-dist.ts",
+    "smoke": "node scripts/release/smoke-http.ts",
     "preview:worker": "wrangler dev --ip 127.0.0.1 --port 8787",
     "deploy:check": "wrangler deploy --dry-run"
   },

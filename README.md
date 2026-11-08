@@ -22,11 +22,13 @@ cutover is approved.
 | `npm run import:check` | Preview an Obsidian import (read-only)          |
 | `npm run import`  | Import approved vault notes into `src/content/blog/` (`-- --prune` to remove unpublished ones, with confirmation) |
 | `npm test`        | Importer test suite                                 |
+| `npm run smoke -- <url>` | Read-only smoke test of a running deployment against `dist/` (local, staging with an Access token, or production) |
 | `npm run verify:dist` | Static release checks on `dist/` (canonicals, CSP-safe markup, links and anchors, redirects, sitemap, RSS, no drafts). Run after `build` |
 
 The vault path lives in `obsidian.local.json` (gitignored; see
 `obsidian.local.example.json`). No command here commits, pushes, or deploys.
 Deployment, staging, and rollback: see [docs/deployment.md](docs/deployment.md).
+Production cutover procedure: [docs/production-cutover-runbook.md](docs/production-cutover-runbook.md).
 
 Requires Node 22.23.4 or later (`.nvmrc`: 24).
 
