@@ -15,7 +15,7 @@ interface Props {
 }
 
 const { project, article } = Astro.props;
-const tone = project.status.label === "Active" ? "active" : project.status.label === "Paused" ? "paused" : "neutral";
+const tone = project.status.label === "Active" || project.status.label === "Live" ? "active" : project.status.label === "Paused" ? "paused" : "neutral";
 const headingId = `${project.id}-title`;
 ---
 
