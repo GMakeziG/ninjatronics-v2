@@ -50,19 +50,11 @@ const nowSchema = z.object({
 export type NowItem = z.infer<typeof itemSchema>;
 
 export const NOW = nowSchema.parse({
-  updated: "2026-11-02",
+  updated: "2026-11-09",
   intro:
     "A snapshot of what I'm building, learning, and experimenting with right now. I update this page as my priorities change.",
 
   building: [
-    {
-      title: "Ninjatronics v2",
-      note: "Finishing the website and preparing the Obsidian-powered publishing workflow for production.",
-      links: [
-        { kind: "project", id: "ninjatronics-v2" },
-        { kind: "article", slug: "obsidian-syncthing-headless-linux" },
-      ],
-    },
     {
       title: "Kubernetes GitOps homelab",
       note: "Maintaining and improving my self-hosted Kubernetes environment using Flux, infrastructure automation, and GitOps.",
