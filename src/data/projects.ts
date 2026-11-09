@@ -128,7 +128,7 @@ export const PROJECTS = projectsSchema.parse({
       status: { label: "Active", activity: "active" },
       summary:
         "An AI agent orchestration platform that organizes specialized agents into an engineering team with clear ownership, reproducible workflows, and version-controlled operating standards.",
-      tech: ["Herdr", "Hermes", "Claude Code", "Codex", "Shell", "Python"],
+      tech: ["Herdr", "Hermes", "Codex", "Shell", "Python"],
       repositories: [repo("ninjatronics-ai")],
     },
     {

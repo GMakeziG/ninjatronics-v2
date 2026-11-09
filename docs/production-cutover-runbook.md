@@ -385,7 +385,7 @@ dig +short MX ninjatronics.io @1.1.1.1; dig +short TXT ninjatronics.io @1.1.1.1;
 
 | When | What | Who |
 |---|---|---|
-| Cutover + 15 min | Smoke passes; mail test arrived; `www` and `http` redirect | You (Claude can run the read-only commands) |
+| Cutover + 15 min | Smoke passes; mail test arrived; `www` and `http` redirect | You (an operator can run the read-only commands) |
 | + 1 hour | Cloudflare analytics for the zone: 5xx near zero; 4xx not spiking. `npm run smoke` again | You |
 | + 24 hours | Search Console coverage and crawl errors; 404s on legacy paths not in `_redirects` (add rules by PR if warranted) | You |
 | Daily for 7 days | Smoke once; Search Console; production ETag/version unchanged except approved deploys | You |
@@ -626,8 +626,8 @@ from your own machine, so it never has a public URL:
 - Deploy a one-file static placeholder with `workers_dev: false` and
   `preview_urls: false`.
 - Run `wrangler login` first and `wrangler logout` afterwards.
-- This needs your approval and the exact files and commands, which Claude
-  prepares on request.
+- This needs your approval and the exact files and commands, which the
+  operator prepares on request.
 - Don't put Cloudflare credentials on the build host.
 
 **Undo:** Worker → Settings → **Delete**. This is safe only while nothing
@@ -817,20 +817,21 @@ pass.
 ### 9.8 Implementation checklist
 
 Each line needs your approval when it runs. Stop at the first failure.
+"Operator" means whoever runs the commands on your behalf.
 
 | # | Who | Step | Done when |
 |---|---|---|---|
 | 1 ✅ | You, dashboard | **C1** Create `ninjatronics-v2-production` (Hello World); disable workers.dev and Preview URLs | D19 recorded |
 | 2 ✅ | You, dashboard | **C2** Production token: Workers Editor on that Worker only, 90 days | D21 recorded, expiry noted |
 | 3 | You, dashboard | **C3** Staging token covers `ninjatronics-v2` only | D17 recorded |
-| 4 ✅ | You or Claude, `gh` | **G1** `production` environment (reviewer, no admin bypass, `main` only) | §9.5 verify output matches |
+| 4 ✅ | You or operator, `gh` | **G1** `production` environment (reviewer, no admin bypass, `main` only) | §9.5 verify output matches |
 | 5 ✅ | You, `gh` (interactive) | **G2** Production secrets | `gh secret list --env production` shows both names; no repo-level CF secrets |
-| 6 | Claude | Open the R-changes PR (R1–R6); CI green; you review and merge | Merged |
-| 7 | You approve, Claude dispatches | **Deploy staging** for the merged commit | Token isolation step: own Worker 200, production **403 / 10000**; Access check OK; containment skipped |
-| 8 | Claude | Staging smoke through Access (§4) | `ALL SMOKE CHECKS PASSED` |
-| 9 | You approve, Claude dispatches | **Deploy production** for the same commit | Gate OK; isolation OK (own 200, staging 403); settings: workers.dev off, Preview URLs off; smoke skipped (no URL yet) |
-| 10 | Claude, read-only | Negative check: dispatch "Deploy production" on a commit **not** staged (only if one exists; otherwise skip) | Fails at the gate, before credentials |
-| 11 | You approve, Claude runs | Legacy freeze ruleset (§2.4) | `rules/branches/main` lists the four rules |
+| 6 | Operator | Open the R-changes PR (R1–R6); CI green; you review and merge | Merged |
+| 7 | You approve, operator dispatches | **Deploy staging** for the merged commit | Token isolation step: own Worker 200, production **403 / 10000**; Access check OK; containment skipped |
+| 8 | Operator | Staging smoke through Access (§4) | `ALL SMOKE CHECKS PASSED` |
+| 9 | You approve, operator dispatches | **Deploy production** for the same commit | Gate OK; isolation OK (own 200, staging 403); settings: workers.dev off, Preview URLs off; smoke skipped (no URL yet) |
+| 10 | Operator, read-only | Negative check: dispatch "Deploy production" on a commit **not** staged (only if one exists; otherwise skip) | Fails at the gate, before credentials |
+| 11 | You approve, operator runs | Legacy freeze ruleset (§2.4) | `rules/branches/main` lists the four rules |
 | 12 | — | Cutover per §5 (attach to `ninjatronics-v2-production`), then **G3** | §6 passes |
 
 **To confirm on first live use:** the 403-vs-404 behavior (step 7), and
